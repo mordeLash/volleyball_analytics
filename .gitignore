@@ -21,4 +21,5 @@ build/
 
 # --- Environment Secrets ---
 output/table_data
+output/temp
 .env
