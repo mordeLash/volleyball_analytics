@@ -38,7 +38,7 @@ def get_video_properties(video_path):
 # CORE ENGINE
 # -----------------------------
 def run_processing(segments, video_path, output_path, lookup, mode, fps, width, height):
-    """Internal engine with updated visualization for track_id and speed."""
+    """Internal engine with updated visualization for track_id, speed, and confidence."""
     os.makedirs("tmp", exist_ok=True)
     final_clips = []
 
@@ -48,7 +48,7 @@ def run_processing(segments, video_path, output_path, lookup, mode, fps, width, 
         temp_output = f"tmp/{mode}_seg_{i:04d}.mp4"
 
         if mode == "none":
-            # PATH A: CUT ONLY (Frame-perfect seek with audio) - SILENT
+            # PATH A: CUT ONLY (Frame-perfect seek with audio)
             subprocess.run([
                 "ffmpeg", "-y", "-loglevel", "quiet", "-i", video_path,
                 "-ss", str(t0), "-t", str(dur),
@@ -56,7 +56,7 @@ def run_processing(segments, video_path, output_path, lookup, mode, fps, width, 
                 temp_output
             ], check=True, capture_output=True)
         else:
-            # PATH B: VISUALIZATION (No Audio) - SILENT
+            # PATH B: VISUALIZATION (No Audio)
             ffmpeg_cmd = [
                 'ffmpeg', '-y', '-loglevel', 'quiet',
                 '-f', 'rawvideo', '-vcodec', 'rawvideo',
@@ -85,14 +85,15 @@ def run_processing(segments, video_path, output_path, lookup, mode, fps, width, 
                         # Draw Bounding Box
                         cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
                         
-                        # --- New Metadata Display ---
+                        # --- Metadata Display (Including Confidence) ---
                         tid = d.get("track_id", "N/A")
                         speed = d.get("speed_px_frame", 0.0)
+                        conf = d.get("conf", 0.0) # Added Confidence
                         
-                        label = f"ID:{tid} Spd:{speed:.2f}"
-                        # Put text above the box
+                        # Added C: for confidence to the label
+                        label = f"ID:{tid} S:{speed:.1f} C:{conf:.2f}"
                         cv2.putText(frame, label, (x1, y1 - 10), 
-                                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+                                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
                         
                     trail.append((cx, cy))
                 else:
@@ -103,7 +104,6 @@ def run_processing(segments, video_path, output_path, lookup, mode, fps, width, 
                 if mode in ("trajectory", "both"):
                     for j in range(1, len(trail)):
                         if trail[j] is not None and trail[j - 1] is not None:
-                            # Distance check to prevent lines across the screen if tracking skips
                             if np.linalg.norm(np.subtract(trail[j], trail[j - 1])) < 120:
                                 cv2.line(frame, trail[j - 1], trail[j], (255, 255, 0), 2)
 
@@ -115,21 +115,27 @@ def run_processing(segments, video_path, output_path, lookup, mode, fps, width, 
 
         final_clips.append(temp_output)
 
-    # Concat - SILENT
-    list_path = f"tmp/list_{mode}.txt"
-    with open(list_path, "w") as f:
-        for c in final_clips:
-            f.write(f"file '{Path(c).resolve().as_posix()}'\n")
+    # --- BUG FIX: Handle Single or Multiple Clips ---
+    if len(final_clips) == 1:
+        # If only one clip, just move it to the final destination
+        shutil.move(final_clips[0], output_path)
+    elif len(final_clips) > 1:
+        # Concat multiple clips
+        list_path = f"tmp/list_{mode}.txt"
+        with open(list_path, "w") as f:
+            for c in final_clips:
+                f.write(f"file '{Path(c).resolve().as_posix()}'\n")
+        
+        subprocess.run([
+            "ffmpeg", "-y", "-loglevel", "quiet", "-f", "concat", "-safe", "0",
+            "-i", list_path, "-c", "copy", output_path
+        ], check=True, capture_output=True)
+        
+        if os.path.exists(list_path): os.remove(list_path)
 
-    subprocess.run([
-        "ffmpeg", "-y", "-loglevel", "quiet", "-f", "concat", "-safe", "0",
-        "-i", list_path, "-c", "copy", output_path
-    ], check=True, capture_output=True)
-    
-    # Cleanup temp segments for this mode
+    # Cleanup any remaining temp segments
     for c in final_clips: 
         if os.path.exists(c): os.remove(c)
-    if os.path.exists(list_path): os.remove(list_path)
 
 # -----------------------------
 # PUBLIC API
@@ -144,20 +150,16 @@ def visualize(
 ):
     fps, total_frames, width, height = get_video_properties(video_path)
 
-    # ---- Load Data
     df = pd.read_csv(tracking_csv)
     if "cx" not in df:
         df["cx"] = (df["x1"] + df["x2"]) / 2
         df["cy"] = (df["y1"] + df["y2"]) / 2
     
-    # Ensure speed column exists to avoid KeyError in loop
     if "speed_px_frame" not in df and "cx" in df:
-        # Simple velocity calculation if it wasn't pre-calculated
         df['speed_px_frame'] = np.sqrt(df['cx'].diff()**2 + df['cy'].diff()**2).fillna(0)
 
     lookup = df.set_index("frame").to_dict("index")
 
-    # ---- Build Segments (With Edge Buffers)
     segments = []
     if predictions_csv and os.path.exists(predictions_csv):
         p = pd.read_csv(predictions_csv)
@@ -180,15 +182,13 @@ def visualize(
     else:
         segments = [(0, total_frames - 1)]
 
-    # ---- Execution Logic
     if overlay_mode == "all":
         viz_out = output_path.replace(".mp4", "_visualized.mp4")
         run_processing(segments, video_path, viz_out, lookup, "both", fps, width, height)
         
         cut_out = output_path.replace(".mp4", "_cuts_only.mp4")
         run_processing(segments, video_path, cut_out, lookup, "none", fps, width, height)
-        print(f"✅ Generated both: {viz_out} and {cut_out}")
     else:
         run_processing(segments, video_path, output_path, lookup, overlay_mode, fps, width, height)
-        print(f"✅ Generated: {output_path}")
+
     if os.path.exists("tmp"): shutil.rmtree("tmp")
