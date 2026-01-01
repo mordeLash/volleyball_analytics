@@ -5,23 +5,6 @@ This project provides an automated computer vision pipeline for analyzing volley
 <img src="./assets/track_clip1.gif" alt="cut clip1" width="400"/> <img src="./assets/track_clip2.gif" alt="track clip2" width="400"/>
 
 
----
-
-## 🛠️ Installation & Setup
-
-This project requires **Python 3.12+**.
-
-### Dependencies
-
-The following libraries are required for the pipeline:
-
-* **Computer Vision:** `ultralytics` (YOLOv11), `opencv-python`
-* **Data Analysis:** `numpy`, `pandas`, `scikit-learn`
-* **Visualization:** `seaborn`, `tqdm`
-* **Utility:** `pathlib`
-
----
-
 ## 📑 Pipeline Stages
 
 ### Stage 1: Detect Volleyball in Video
@@ -90,19 +73,20 @@ This project uses [uv](https://docs.astral.sh/uv/) for fast, reliable Python pac
 ### Prerequisites
 
 * **Python 3.12+**
-* **uv** (Install via `curl -LsSf https://astral.sh/uv/install.sh | sh` or your preferred method)
+* **uv** 
 
 ### Getting Started
 
 1. **Clone the Repository:**
 ```bash
-git clone https://github.com/mordeLash/volleyball_analytics
+git clone <your-repository-url>
 cd volleyball_analytics
 
 ```
 
 
 2. **Install Dependencies:**
+```bash
 uv sync
 
 ```
