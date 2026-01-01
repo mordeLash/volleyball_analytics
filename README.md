@@ -82,25 +82,6 @@ This stage utilizes a machine learning classifier to categorize match states.
 
 ---
 
-## 💻 Usage
-
-The pipeline is executed via `main.py`. You can run the full process or start from intermediate CSV files.
-
-```bash
-# Full pipeline execution
-python main.py --video_path "path/to/video.mp4"
-
-# Start from specific intermediate data
-python main.py --input_detections "detections.csv"
-python main.py --input_tracks "tracks.csv"
-
-# Stop at a specific stage
-python main.py --video_path "match.mp4" --stop_at cleaning
-
-```
-
----
-
 
 ## 🛠️ Installation & Setup
 
