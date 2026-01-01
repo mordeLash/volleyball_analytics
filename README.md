@@ -1,6 +1,7 @@
-# Project: Automated Volleyball Match Analysis Pipeline
+# Automated Volleyball Match Analysis 
 
 This project provides an automated computer vision pipeline for analyzing volleyball match footage. It tracks ball movement to distinguish between active rallies and downtime, facilitating automated highlight extraction and performance analytics.
+
 | ![cut clip1](./assets/track_clip1.gif) | ![track clip2](./assets/track_clip2.gif) |
 
 ---
@@ -51,7 +52,7 @@ This stage utilizes a machine learning classifier to categorize match states.
 * **Train a Random Forest Model:** A `RandomForestClassifier` from Scikit-learn was trained on labeled data from three different matches.
 * **Evaluation:** The model is assessed based on its F1 score and the relative importance of specific features.
 
-| ![Predictor F1 Score](./assets/rally_predictor_v4_f1_score.png) | ![Feature Importance](assets\rally_predictor_v4_feature_importance.png) |
+| ![Predictor F1 Score](./assets/rally_predictor_v4_f1_score.png) | ![Feature Importance](./assets/rally_predictor_v4_feature_importance.png) |
 
 ---
 
