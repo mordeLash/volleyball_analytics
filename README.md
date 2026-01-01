@@ -55,7 +55,7 @@ This stage utilizes a machine learning classifier to categorize match states.
 
 [Predictor F1 Score]|[Feature Importance] 
 
-<img src="./assets/rally_predictor_v4_f1_score.png" alt="Predictor F1 Score" width="400"/> <img src="./assets/rally_predictor_v4_feature_importance.png" alt="Feature Importance" width="400"/>
+<img src="./assets/rally_predictor_v4_f1_score.png" alt="Predictor F1 Score" width="500" height="500"/> <img src="./assets/rally_predictor_v4_feature_importance.png" alt="Feature Importance" width="500" height="500"/>
 
 ---
 
