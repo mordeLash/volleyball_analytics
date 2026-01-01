@@ -2,8 +2,8 @@
 
 This project provides an automated computer vision pipeline for analyzing volleyball match footage. It tracks ball movement to distinguish between active rallies and downtime, facilitating automated highlight extraction and performance analytics.
 
-<img src="./assets/track_clip1.gif" alt="cut clip1" width="200"/>
-<img src="./assets/track_clip2.gif" alt="track clip2" width="200"/>
+<img src="./assets/track_clip1.gif" alt="cut clip1" width="400"/> <img src="./assets/track_clip2.gif" alt="track clip2" width="400"/>
+
 
 ---
 
@@ -53,9 +53,10 @@ This stage utilizes a machine learning classifier to categorize match states.
 * **Train a Random Forest Model:** A `RandomForestClassifier` from Scikit-learn was trained on labeled data from three different matches.
 * **Evaluation:** The model is assessed based on its F1 score and the relative importance of specific features.
 
-|[Predictor F1 Score]|[Feature Importance]|
-<img src="./assets/rally_predictor_v4_f1_score.png" alt="Predictor F1 Score" width="200"/>
-<img src="./assets/rally_predictor_v4_feature_importance.png" alt="Feature Importance" width="200"/>
+* [Predictor F1 Score]|[Feature Importance].
+* 
+<img src="./assets/rally_predictor_v4_f1_score.png" alt="Predictor F1 Score" width="400"/>
+<img src="./assets/rally_predictor_v4_feature_importance.png" alt="Feature Importance" width="400"/>
 
 ---
 
