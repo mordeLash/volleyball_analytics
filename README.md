@@ -101,6 +101,82 @@ python main.py --video_path "match.mp4" --stop_at cleaning
 
 ---
 
+
+## 🛠️ Installation & Setup
+
+This project uses [uv](https://docs.astral.sh/uv/) for fast, reliable Python package and project management.
+
+### Prerequisites
+
+* **Python 3.12+**
+* **uv** (Install via `curl -LsSf https://astral.sh/uv/install.sh | sh` or your preferred method)
+
+### Getting Started
+
+1. **Clone the Repository:**
+```bash
+git clone <your-repository-url>
+cd volleyball_analytics
+
+```
+
+
+2. **Install Dependencies:**
+Use `uv sync` to create a virtual environment and install all required dependencies (including `ultralytics`, `opencv-python`, and `scikit-learn`) exactly as specified in the lockfile.
+```bash
+uv sync
+
+```
+
+
+---
+
+## 💻 Usage
+
+The pipeline is managed through `main.py` and can be executed as a full process or started from intermediate stages.
+
+### Running the Full Pipeline
+
+To process a video from scratch (Detection → Tracking → Cleaning → Features → Prediction → Visualization):
+
+```bash
+uv run main.py --video_path "path/to/match.mp4"
+
+```
+
+### Advanced Usage & Entry Points
+
+You can skip computationally expensive stages (like detection) by providing intermediate CSV files:
+
+* **Start from Tracking:**
+```bash
+uv run main.py --input_detections "output/table_data/game1_detections.csv"
+
+```
+
+
+* **Start from Feature Extraction:**
+```bash
+uv run main.py --input_clean "output/table_data/game1_cleaned.csv"
+
+```
+
+
+* **Stop Early (e.g., just for cleaning):**
+```bash
+uv run main.py --video_path "match.mp4" --stop_at cleaning
+
+```
+
+### Configuration Options
+
+* `--rf_model`: Choose which Random Forest version to use (default: `v3`).
+* `--device`: Specify `cpu` or `cuda` for YOLOv11 inference (default: `cpu`).
+* `--visualize_early`: Generate a video overlay immediately after the current stage.
+
+---
+
+
 ## 🗺️ Roadmap & Future Improvements
 
 * **Handling Variations:** Support for non-30 FPS video models.
