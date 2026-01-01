@@ -53,9 +53,20 @@ This stage utilizes a machine learning classifier to categorize match states.
 * **Train a Random Forest Model:** A `RandomForestClassifier` from Scikit-learn was trained on labeled data from three different matches.
 * **Evaluation:** The model is assessed based on its F1 score and the relative importance of specific features.
 
-[Predictor F1 Score]|[Feature Importance] 
-
-<img src="./assets/rally_predictor_v4_f1_score.png" alt="Predictor F1 Score" width="500" height="500"/> <img src="./assets/rally_predictor_v4_feature_importance.png" alt="Feature Importance" width="500" height="500"/>
+<table border="0">
+  <tr>
+    <td align="center"><b>Predictor F1 Score</b></td>
+    <td align="center"><b>Feature Importance</b></td>
+  </tr>
+  <tr>
+    <td>
+      <img src="./assets/rally_predictor_v4_f1_score.png" alt="Predictor F1 Score" width="450" height="450"/>
+    </td>
+    <td>
+      <img src="./assets/rally_predictor_v4_feature_importance.png" alt="Feature Importance" width="450" height="450"/>
+    </td>
+  </tr>
+</table>
 
 ---
 
