@@ -96,15 +96,13 @@ This project uses [uv](https://docs.astral.sh/uv/) for fast, reliable Python pac
 
 1. **Clone the Repository:**
 ```bash
-git clone <your-repository-url>
+git clone https://github.com/mordeLash/volleyball_analytics
 cd volleyball_analytics
 
 ```
 
 
 2. **Install Dependencies:**
-Use `uv sync` to create a virtual environment and install all required dependencies (including `ultralytics`, `opencv-python`, and `scikit-learn`) exactly as specified in the lockfile.
-```bash
 uv sync
 
 ```
