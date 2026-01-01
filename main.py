@@ -16,6 +16,7 @@ import os
 import argparse
 import shutil
 import sys
+import yaml
 
 def main():
     STAGES = ["detection", "tracking", "cleaning", "features", "prediction", "visualization"]
@@ -30,7 +31,7 @@ def main():
 
     # --- Config ---
     parser.add_argument("--detection_model", type=str, default="./models/ball_detection/vbn11_openvino_model")
-    parser.add_argument("--rf_model_path", type=str, default="./models/rally_prediction/rally_predictor_rf_v3.pkl")
+    parser.add_argument("--rf_model", type=str, default="v3")
     parser.add_argument("--device", type=str, default="cpu")
     parser.add_argument("--stop_at", type=str, choices=STAGES, default="visualization")
     parser.add_argument("--visualize_early", action="store_true")
@@ -61,6 +62,16 @@ def main():
     fn_features = os.path.join(temp_dir, f"{base_name}_features.csv")
     fn_predictions = os.path.join(temp_dir, f"{base_name}_predictions.csv")
     final_video_output = os.path.join(video_out_dir, f"{base_name}_{args.stop_at}.mp4")
+
+    # --- Load RF Model Config ---
+    rf_model_config_path = os.path.join("models", "rally_prediction", "config.yaml")
+    with open(rf_model_config_path, 'r') as f:
+        rf_configs = yaml.safe_load(f)["models"]
+    if args.rf_model in rf_configs:
+        rf_model_info = rf_configs[args.rf_model]
+        rf_path = rf_model_info.get("path", f"models/rally_prediction/{args.rf_model}.pkl")
+        feature_params = rf_model_info.get("feature_extraction", {})
+
 
     # --- Helper: Should we skip a step? ---
     def is_already_provided(file_path, stage_name):
@@ -115,12 +126,14 @@ def main():
 
     # 4. Features
     print("--- Extracting Features ---")
-    extract_features(input_csv=fn_clean, output_csv=fn_features)
+    extract_features(input_csv=fn_clean, output_csv=fn_features,window_size=feature_params.get("window_size",60),
+                     interpolation_size=feature_params.get("interpolation_size",5))
     should_stop("features", tracking_file=fn_features)
 
     # 5. Prediction
     print("--- Predicting Rallies ---")
-    predictions = predict_rallies(rf_path=args.rf_model_path, df_path=fn_features)
+
+    predictions = predict_rallies(rf_path=rf_path, df_path=fn_features)
     predictions = smooth_predictions(predictions)
     pd.DataFrame({'label': predictions}).to_csv(fn_predictions, index=False)
     
