@@ -6,7 +6,6 @@ from ultralytics import YOLO
 import os
 
 def get_ball_detections(model_path=None, video_path=None, output_csv=None, device=None):
-    # 1. Load the OpenVINO model
     # Ensure the path points to the folder containing the .xml and .bin files
     model_path = model_path
     model = YOLO(model_path, task="detect")
@@ -34,8 +33,6 @@ def get_ball_detections(model_path=None, video_path=None, output_csv=None, devic
 
             # 3. Run Inference
             start_time = time.time()
-            
-            # device="cpu" is redundant if the model is already OpenVINO, 
             # but good for clarity. stream=True is more memory efficient.
             results = model.predict(
                 source=frame, 
@@ -71,55 +68,60 @@ def get_ball_detections(model_path=None, video_path=None, output_csv=None, devic
         cap.release()
         print(f"\nProcessing complete. Results saved to {output_csv}")
 
-def get_ball_detections_fast(model_path, video_path, output_csv, device='cpu'):
+import csv
+import cv2
+from ultralytics import YOLO
+from tqdm import tqdm
+
+def get_ball_detections_fast(model_path, video_path, output_csv, device='cpu'): # Use '0' for GPU
     model = YOLO(model_path, task="detect")
 
-    # Get total frames for the progress bar
+    # Get total frames for progress bar
     cap = cv2.VideoCapture(video_path)
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     cap.release()
 
     # Generator for inference
+    # Note: imgsz should match what you exported in the .engine file
     results = model.predict(
         source=video_path,
         device=device,
         conf=0.1,
         iou=0,
         imgsz=640,
-        stream=True,
+        stream=True, 
         verbose=False
     )
 
     print(f"Starting inference on {total_frames} frames...")
     
-    # Initialize CSV with header
+    # Open the file ONCE at the start
     with open(output_csv, mode='w', newline='') as f:
         writer = csv.writer(f)
         writer.writerow(['frame', 'class', 'conf', 'x1', 'y1', 'x2', 'y2'])
 
-    # Wrap the results generator with tqdm for a live progress bar
-    with tqdm(total=total_frames, desc="Processing Video", unit="frame") as pbar:
-        for frame_count, result in enumerate(results):
-            boxes = result.boxes
-            if len(boxes) > 0:
-                # Optimized bulk extraction
-                coords = boxes.xyxy.cpu().numpy().astype(int)
-                confs = boxes.conf.cpu().numpy()
-                clss = boxes.cls.cpu().numpy().astype(int)
+        with tqdm(total=total_frames, desc="Processing Video", unit="frame") as pbar:
+            for frame_count, result in enumerate(results):
+                boxes = result.boxes
+                if len(boxes) > 0:
+                    # Move all data to CPU in one single batch transfer
+                    # This is much faster than individual calls
+                    data = boxes.data.cpu().numpy() 
+                    # data format: [x1, y1, x2, y2, conf, class]
 
-                rows = []
-                for i in range(len(coords)):
-                    rows.append([
-                        frame_count, clss[i], f"{confs[i]:.4f}", 
-                        coords[i][0], coords[i][1], coords[i][2], coords[i][3]
-                    ])
-                
-                # Append to CSV
-                with open(output_csv, mode='a', newline='') as f:
-                    writer = csv.writer(f)
+                    rows = []
+                    for row in data:
+                        rows.append([
+                            frame_count, 
+                            int(row[5]),          # class
+                            f"{row[4]:.4f}",      # conf
+                            int(row[0]), int(row[1]), int(row[2]), int(row[3]) # coords
+                        ])
+                    
+                    # Write rows in bulk while the file is already open
                     writer.writerows(rows)
 
-            pbar.update(1)
+                pbar.update(1)
 
     print(f"\nProcessing complete. Results saved to {output_csv}")
 
