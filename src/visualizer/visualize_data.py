@@ -137,6 +137,92 @@ def run_processing(segments, video_path, output_path, lookup, mode, fps, width, 
     for c in final_clips: 
         if os.path.exists(c): os.remove(c)
 
+
+def run_processing_optimized(segments, video_path, output_path, lookup, mode, fps, width, height):
+    """
+    High-performance engine: 
+    - Mode 'none': Direct FFmpeg stream manipulation (Fast + Audio).
+    - Other modes: OpenCV + FFmpeg pipe with audio mapping.
+    """
+    
+    if mode == "none":
+        # --- PATH A: PURE FFMPEG (No OpenCV, Frame-Perfect with Audio) ---
+        # We create a filter complex to extract the specific segments and concat them
+        # This is much faster and cleaner than temporary files.
+        filter_script = ""
+        for i, (f0, f1) in enumerate(segments):
+            t0, dur = f0 / fps, (f1 - f0 + 1) / fps
+            filter_script += f"[0:v]trim=start={t0}:duration={dur},setpts=PTS-STARTPTS[v{i}]; "
+            filter_script += f"[0:a]atrim=start={t0}:duration={dur},asetpts=PTS-STARTPTS[a{i}]; "
+        
+        concat_v = "".join([f"[v{i}]" for i in range(len(segments))])
+        concat_a = "".join([f"[a{i}]" for i in range(len(segments))])
+        filter_script += f"{concat_v}concat=n={len(segments)}:v=1:a=0[outv]; "
+        filter_script += f"{concat_a}concat=n={len(segments)}:v=0:a=1[outa]"
+
+        cmd = [
+            "ffmpeg", "-y", "-loglevel", "error", "-i", video_path,
+            "-filter_complex", filter_script,
+            "-map", "[outv]", "-map", "[outa]",
+            "-c:v", "libx264", "-crf", "18", "-c:a", "aac", output_path
+        ]
+        subprocess.run(cmd, check=True)
+        return
+
+    # --- PATH B: VISUALIZATION (OpenCV + Audio Re-mapping) ---
+    # To get audio while drawing, we pipe frames to FFmpeg AND tell it to pull audio from source
+    ffmpeg_cmd = [
+        'ffmpeg', '-y', '-loglevel', 'error',
+        '-f', 'rawvideo', '-vcodec', 'rawvideo', '-s', f'{width}x{height}', 
+        '-pix_fmt', 'bgr24', '-r', str(fps),
+        '-i', '-',  # Input 0: The frames we are drawing
+        '-i', video_path,  # Input 1: The original file (for audio)
+        '-filter_complex', 
+        # Here we collect audio segments from Input 1 to match our frames
+        "".join([f"[1:a]atrim=start={f0/fps}:duration={(f1-f0+1)/fps},asetpts=PTS-STARTPTS[a{i}];" for i, (f0, f1) in enumerate(segments)]) +
+        "".join([f"[a{i}]" for i in range(len(segments))]) + f"concat=n={len(segments)}:v=0:a=1[outa]",
+        '-map', '0:v', '-map', '[outa]', # Map frames from pipe, audio from concat
+        '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '23', 
+        '-pix_fmt', 'yuv420p', '-c:a', 'aac', output_path
+    ]
+    
+    cap = cv2.VideoCapture(video_path)
+    process = subprocess.Popen(ffmpeg_cmd, stdin=subprocess.PIPE)
+
+    try:
+        for f0, f1 in tqdm(segments, desc=f"Visualizing: {mode}"):
+            if int(cap.get(cv2.CAP_PROP_POS_FRAMES)) != f0:
+                cap.set(cv2.CAP_PROP_POS_FRAMES, f0)
+            
+            trail = []
+            for current_frame_idx in range(f0, f1 + 1):
+                ret, frame = cap.read()
+                if not ret: break
+
+                # Drawing logic
+                d = lookup.get(current_frame_idx)
+                if d:
+                    if mode in ("data", "both"):
+                        x1, y1, x2, y2 = map(int, (d["x1"], d["y1"], d["x2"], d["y2"]))
+                        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                        label = f"ID:{d.get('track_id','N/A')} S:{d.get('speed_px_frame',0):.1f}"
+                        cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+                    trail.append((int(d["cx"]), int(d["cy"])))
+                else:
+                    trail.append(None)
+
+                if len(trail) > 30: trail.pop(0)
+                if mode in ("trajectory", "both") and len(trail) > 1:
+                    pts = np.array([p for p in trail if p is not None], np.int32).reshape((-1, 1, 2))
+                    if len(pts) > 1:
+                        cv2.polylines(frame, [pts], False, (255, 255, 0), 2, cv2.LINE_AA)
+
+                process.stdin.write(frame.tobytes())
+    finally:
+        cap.release()
+        process.stdin.close()
+        process.wait()
+
 # -----------------------------
 # PUBLIC API
 # -----------------------------
@@ -184,11 +270,12 @@ def visualize(
 
     if overlay_mode == "all":
         viz_out = output_path.replace(".mp4", "_visualized.mp4")
-        run_processing(segments, video_path, viz_out, lookup, "both", fps, width, height)
+        run_processing_optimized(segments, video_path, viz_out, lookup, "both", fps, width, height)
         
         cut_out = output_path.replace(".mp4", "_cuts_only.mp4")
-        run_processing(segments, video_path, cut_out, lookup, "none", fps, width, height)
+        run_processing_optimized(segments, video_path, cut_out, lookup, "none", fps, width, height)
     else:
-        run_processing(segments, video_path, output_path, lookup, overlay_mode, fps, width, height)
+        cut_out = output_path.replace(".mp4", "_cuts_only.mp4")
+        run_processing_optimized(segments, video_path, cut_out, lookup, overlay_mode, fps, width, height)
 
     if os.path.exists("tmp"): shutil.rmtree("tmp")

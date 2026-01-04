@@ -54,7 +54,7 @@ def main():
         print("Error: You must provide at least one input (--video_path, --input_detections, etc.)")
         sys.exit(1)
     
-    base_name = os.path.splitext(os.path.basename(input_source))[0].split('_')[0]
+    base_name = os.path.basename(input_source)
     
     # --- Internal Path Definitions ---
     fn_detections = args.input_detections or os.path.join(temp_dir, f"{base_name}_detections.csv")
