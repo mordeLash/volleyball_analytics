@@ -3,7 +3,7 @@ import os
 import argparse
 import shutil
 import sys
-from src.ball_detector.get_ball_detections import get_ball_detections
+from src.ball_detector.get_ball_detections import get_ball_detections, get_ball_detections_fast
 from src.ball_detector.track_ball_detections import track_with_physics_predictive
 from src.ball_detector.clean_tracking_data import clean_noise
 from src.rally_predictor.extract_features import extract_features
@@ -30,11 +30,12 @@ def main():
     parser.add_argument("--input_clean", type=str, help="Path to existing cleaned.csv to start from Features/Prediction")
 
     # --- Config ---
-    parser.add_argument("--detection_model", type=str, default="./models/ball_detection/vbn11_openvino_model")
+    parser.add_argument("--detection_model", type=str, default="./models/ball_detection/vbn11_openvino_model_1")
     parser.add_argument("--rf_model", type=str, default="v3")
     parser.add_argument("--device", type=str, default="cpu")
     parser.add_argument("--stop_at", type=str, choices=STAGES, default="visualization")
     parser.add_argument("--visualize_early", action="store_true")
+    parser.add_argument("--visualize_type", type=str, default="none")
     parser.add_argument("--keep_all", action="store_true")
     parser.add_argument("--output_dir", type=str, default="./output")
 
@@ -108,7 +109,7 @@ def main():
         if not args.video_path: 
             print("Error: Video path required for detection."); sys.exit(1)
         print(f"--- Running Detection ---")
-        get_ball_detections(model_path=args.detection_model, video_path=args.video_path, output_csv=fn_detections, device=args.device)
+        get_ball_detections_fast(model_path=args.detection_model, video_path=args.video_path, output_csv=fn_detections, device=args.device)
     should_stop("detection", tracking_file=fn_detections)
 
     # 2. Tracking
@@ -145,7 +146,7 @@ def main():
     if args.video_path:
         print(f"--- Exporting Final Rallies to {video_out_dir} ---")
         visualize(video_path=args.video_path, output_path=final_video_output,
-                  tracking_csv=fn_clean, predictions_csv=fn_predictions, overlay_mode="both")
+                  tracking_csv=fn_clean, predictions_csv=fn_predictions, overlay_mode=args.visualize_type)
     else:
         print("--- Skipping Visualization: No video_path provided ---")
     
