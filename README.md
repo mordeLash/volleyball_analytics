@@ -1,6 +1,6 @@
 # Automated Volleyball Match Analysis 
 
-This project provides an automated computer vision pipeline for analyzing volleyball match footage. It tracks ball movement to distinguish between active rallies and downtime, facilitating automated highlight extraction and performance analytics.
+This project provides an automated computer vision pipeline for analyzing volleyball match footage. It tracks ball movement to distinguish between active rallies and downtime, facilitating automated play-time extraction and cool visualization.
 
 <img src="./assets/track_clip1.gif" alt="cut clip1" width="400"/> <img src="./assets/track_clip2.gif" alt="track clip2" width="400"/>
 
@@ -60,7 +60,7 @@ This stage utilizes a machine learning classifier to categorize match states.
 
 ### Stage 7: Visualization
 
-* **Option 1 (Highlights):** Automatically trims the video based on predictions with a 1-second buffer.
+* **Option 1 (Play Time):** Automatically trims the video based on predictions with a 1-second buffer.
 * **Option 2 (Data Overlay):** Visualizes bounding boxes, ball "trails," and real-time velocity (pixels per frame).
 
 ---
@@ -79,7 +79,7 @@ This project uses [uv](https://docs.astral.sh/uv/) for fast, reliable Python pac
 
 1. **Clone the Repository:**
 ```bash
-git clone <your-repository-url>
+git clone https://github.com/mordeLash/volleyball_analytics
 cd volleyball_analytics
 
 ```
@@ -134,7 +134,7 @@ uv run main.py --video_path "match.mp4" --stop_at cleaning
 ### Configuration Options
 
 * `--rf_model`: Choose which Random Forest version to use (default: `v3`).
-* `--device`: Specify `cpu` or `cuda` for YOLOv11 inference (default: `cpu`).
+* `--device`: Specify `cpu` or `cuda` or `inte:gpu` for YOLOv11 inference (default: `cpu`).
 * `--visualize_early`: Generate a video overlay immediately after the current stage.
 
 ---
