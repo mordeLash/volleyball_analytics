@@ -150,7 +150,7 @@ def run_processing_optimized(segments, video_path, output_path, lookup, mode, fp
         # We create a filter complex to extract the specific segments and concat them
         # This is much faster and cleaner than temporary files.
         filter_script = ""
-        for i, (f0, f1) in tqdm(enumerate(segments), desc=f"Visualizing: {mode}"):
+        for i, (f0, f1) in enumerate(segments):
             t0, dur = f0 / fps, (f1 - f0 + 1) / fps
             filter_script += f"[0:v]trim=start={t0}:duration={dur},setpts=PTS-STARTPTS[v{i}]; "
             filter_script += f"[0:a]atrim=start={t0}:duration={dur},asetpts=PTS-STARTPTS[a{i}]; "

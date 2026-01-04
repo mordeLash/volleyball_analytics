@@ -4,6 +4,8 @@ import csv
 from tqdm import tqdm
 from ultralytics import YOLO
 import os
+import pandas as pd # Optional, but recommended
+
 
 def get_ball_detections(model_path=None, video_path=None, output_csv=None, device=None):
     # Ensure the path points to the folder containing the .xml and .bin files
@@ -68,11 +70,6 @@ def get_ball_detections(model_path=None, video_path=None, output_csv=None, devic
         cap.release()
         print(f"\nProcessing complete. Results saved to {output_csv}")
 
-import csv
-import cv2
-from ultralytics import YOLO
-from tqdm import tqdm
-
 def get_ball_detections_fast(model_path, video_path, output_csv, device='cpu'): # Use '0' for GPU
     model = YOLO(model_path, task="detect")
 
@@ -82,7 +79,6 @@ def get_ball_detections_fast(model_path, video_path, output_csv, device='cpu'): 
     cap.release()
 
     # Generator for inference
-    # Note: imgsz should match what you exported in the .engine file
     results = model.predict(
         source=video_path,
         device=device,
@@ -124,6 +120,7 @@ def get_ball_detections_fast(model_path, video_path, output_csv, device='cpu'): 
                 pbar.update(1)
 
     print(f"\nProcessing complete. Results saved to {output_csv}")
+
 
 if __name__ == "__main__":
     pass

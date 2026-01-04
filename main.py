@@ -3,6 +3,10 @@ import os
 import argparse
 import shutil
 import sys
+import yaml
+# 1. Import the utility function
+from src.utils import get_resource_path
+
 from src.ball_detector.get_ball_detections import get_ball_detections, get_ball_detections_fast
 from src.ball_detector.track_ball_detections import track_with_physics_predictive
 from src.ball_detector.clean_tracking_data import clean_noise
@@ -10,13 +14,6 @@ from src.rally_predictor.extract_features import extract_features
 from src.rally_predictor.rf_predictor import predict_rallies
 from src.rally_predictor.predictions_handler import analyze_rally_stats, smooth_predictions
 from src.visualizer.visualize_data import visualize
-
-import pandas as pd
-import os
-import argparse
-import shutil
-import sys
-import yaml
 
 def main():
     STAGES = ["detection", "tracking", "cleaning", "features", "prediction", "visualization"]
@@ -30,7 +27,9 @@ def main():
     parser.add_argument("--input_clean", type=str, help="Path to existing cleaned.csv to start from Features/Prediction")
 
     # --- Config ---
-    parser.add_argument("--detection_model", type=str, default="./models/ball_detection/vbn11_openvino_model_1")
+    # 2. UPDATED: Wrap the default detection model path
+    parser.add_argument("--detection_model", type=str, 
+                        default=get_resource_path("models/ball_detection/vbn11_openvino_model_1"))
     parser.add_argument("--rf_model", type=str, default="v3")
     parser.add_argument("--device", type=str, default="cpu")
     parser.add_argument("--stop_at", type=str, choices=STAGES, default="visualization")
@@ -41,14 +40,13 @@ def main():
 
     args = parser.parse_args()
 
-    # --- Directory Setup ---
+    # --- Directory Setup (DO NOT wrap these; they are for user output) ---
     table_data_dir = os.path.join(args.output_dir, "table_data")
     temp_dir = os.path.join(args.output_dir, "temp")
     video_out_dir = os.path.join(args.output_dir, "videos")
     for d in [table_data_dir, temp_dir, video_out_dir]: os.makedirs(d, exist_ok=True)
 
     # --- Base Name Logic ---
-    # Determine the name based on whichever input is provided first
     input_source = args.video_path or args.input_detections or args.input_tracks or args.input_clean
     if not input_source:
         print("Error: You must provide at least one input (--video_path, --input_detections, etc.)")
@@ -65,14 +63,22 @@ def main():
     final_video_output = os.path.join(video_out_dir, f"{base_name}_{args.stop_at}.mp4")
 
     # --- Load RF Model Config ---
-    rf_model_config_path = os.path.join("models", "rally_prediction", "config.yaml")
+    # 3. UPDATED: Wrap the Config YAML path
+    rf_model_config_path = get_resource_path(os.path.join("models", "rally_prediction", "config.yaml"))
+    
     with open(rf_model_config_path, 'r') as f:
         rf_configs = yaml.safe_load(f)["models"]
+
     if args.rf_model in rf_configs:
         rf_model_info = rf_configs[args.rf_model]
-        rf_path = rf_model_info.get("path", f"models/rally_prediction/{args.rf_model}.pkl")
+        
+        # 4. UPDATED: Wrap the specific RF model path
+        default_rel_path = f"models/rally_prediction/{args.rf_model}.pkl"
+        rf_path = get_resource_path(rf_model_info.get("path", default_rel_path))
+        
         feature_params = rf_model_info.get("feature_extraction", {})
 
+    # ... [Rest of the logic remains the same] ...
 
     # --- Helper: Should we skip a step? ---
     def is_already_provided(file_path, stage_name):
@@ -81,7 +87,6 @@ def main():
             return True
         return False
 
-    # --- Helper: Finalize & Stop (Keep your existing logic) ---
     def finalize_run():
         if args.keep_all:
             for f in [fn_detections, fn_tracks, fn_clean, fn_predictions, fn_features]:
@@ -99,8 +104,6 @@ def main():
             print(f"\n--- Stopping early after {current_stage} stage ---")
             finalize_run()
             sys.exit(0)
-
-    # --- Execution Logic ---
 
     # 1. Detection
     if not is_already_provided(args.input_detections, "detection") and \
@@ -133,7 +136,6 @@ def main():
 
     # 5. Prediction
     print("--- Predicting Rallies ---")
-
     predictions = predict_rallies(rf_path=rf_path, df_path=fn_features)
     predictions = smooth_predictions(predictions)
     pd.DataFrame({'label': predictions}).to_csv(fn_predictions, index=False)
