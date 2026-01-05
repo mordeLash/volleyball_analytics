@@ -1,7 +1,29 @@
 import pandas as pd
 import numpy as np
 
+
+
 def clean_noise(tracking_csv, output_csv):
+    """
+    Filters noisy tracking data and resolves temporal overlaps to produce a clean single-object trajectory.
+
+    The function performs a four-stage cleaning process:
+    1. Statistics Calculation: Aggregates track duration, confidence, and Euclidean displacement.
+    2. Hard Filtering: Removes tracks that are static (displacement < 20px), very short 
+       (flickers), or consistently low confidence.
+    3. Overlap Resolution: For frames with multiple valid detections, selects the track 
+       with the highest 'quality_score' (Duration * Confidence * Displacement).
+    4. Post-Processing: Removes fragmented tracks that fall below a minimum length 
+       threshold after deduplication.
+
+    Args:
+        tracking_csv (str): Path to the input CSV file containing raw tracking data. 
+            Expected columns: ['track_id', 'frame', 'conf', 'cx', 'cy'].
+        output_csv (str): Path where the cleaned CSV will be saved.
+
+    Returns:
+        None: Saves the resulting DataFrame to output_csv.
+    """
     df = pd.read_csv(tracking_csv)
     
     # 1. Calculate Statistics with Vectorized Physics
@@ -18,23 +40,20 @@ def clean_noise(tracking_csv, output_csv):
     # Calculate Euclidean displacement
     stats['displacement'] = np.sqrt(stats['dist_x']**2 + stats['dist_y']**2)
     
-    # Improved Quality Score: Rewards movement and duration
+    # Quality Score: Rewards movement and duration
     stats['quality_score'] = stats['duration'] * stats['m_conf'] * (stats['displacement'] + 1)
 
-    # 2. Hard Noise Filtering (Refined thresholds)
-    # Using 'query' for readability
+    # 2. Hard Noise Filtering
     is_noise = (
         (stats['displacement'] < 20) | # Static objects
         (stats['duration'] < 5) |      # Flickers
-        ((stats['duration'] < 15) & (stats['max_conf'] < 0.6)) |
-        (stats['m_conf'] < 0.35)
+        ((stats['duration'] < 15) & (stats['max_conf'] < 0.6)) | # Short low-confidence tracks
+        (stats['m_conf'] < 0.35) # Overall low-confidence tracks
     )
-    valid_ids = stats[~is_noise].index
-    df = df[df['track_id'].isin(valid_ids)].copy()
+    valid_ids = stats[~is_noise].index 
+    df = df[df['track_id'].isin(valid_ids)].copy() 
 
-    # 3. Resolve Overlaps (The "Winner-Takes-All" Frame Strategy)
-    # This replaces the nested 'interrupter' loop. If two tracks exist in the 
-    # same frame, the one with the higher global quality score wins.
+    # 3. Resolve Overlaps by Quality Score
     df = df.merge(stats[['quality_score']], on='track_id', how='left')
     df = df.sort_values(by=['frame', 'quality_score'], ascending=[True, False])
     

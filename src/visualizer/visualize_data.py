@@ -12,6 +12,15 @@ from pathlib import Path
 # HELPERS
 # -----------------------------
 def get_video_properties(video_path):
+    """
+    Extracts core metadata from a video file using ffprobe.
+
+    Args:
+        video_path (str): Path to the source video.
+
+    Returns:
+        tuple: (fps, total_frames, width, height)
+    """
     cmd = [
         "ffprobe", "-v", "error",
         "-select_streams", "v:0",
@@ -22,11 +31,13 @@ def get_video_properties(video_path):
     p = subprocess.run(cmd, capture_output=True, text=True, check=True)
     s = json.loads(p.stdout)["streams"][0]
 
+    # Handle frame rate fractions (e.g., '30000/1001')
     num, den = map(int, s["r_frame_rate"].split("/"))
     fps = num / den
     width = int(s["width"])
     height = int(s["height"])
 
+    # Fallback for total frames if nb_frames is missing from metadata
     if "nb_frames" in s:
         total_frames = int(s["nb_frames"])
     else:
@@ -34,121 +45,26 @@ def get_video_properties(video_path):
 
     return fps, total_frames, width, height
 
-# -----------------------------
-# CORE ENGINE
-# -----------------------------
+
 def run_processing(segments, video_path, output_path, lookup, mode, fps, width, height):
-    """Internal engine with updated visualization for track_id, speed, and confidence."""
-    os.makedirs("tmp", exist_ok=True)
-    final_clips = []
-
-    for i, (f0, f1) in enumerate(tqdm(segments, desc=f"Mode: {mode}")):
-        t0 = f0 / fps
-        dur = (f1 - f0 + 1) / fps
-        temp_output = f"tmp/{mode}_seg_{i:04d}.mp4"
-
-        if mode == "none":
-            # PATH A: CUT ONLY (Frame-perfect seek with audio)
-            subprocess.run([
-                "ffmpeg", "-y", "-loglevel", "quiet", "-i", video_path,
-                "-ss", str(t0), "-t", str(dur),
-                "-c:v", "libx264", "-crf", "18", "-c:a", "aac", 
-                temp_output
-            ], check=True, capture_output=True)
-        else:
-            # PATH B: VISUALIZATION (No Audio)
-            ffmpeg_cmd = [
-                'ffmpeg', '-y', '-loglevel', 'quiet',
-                '-f', 'rawvideo', '-vcodec', 'rawvideo',
-                '-s', f'{width}x{height}', '-pix_fmt', 'bgr24', '-r', str(fps),
-                '-i', '-', 
-                '-an', 
-                '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-preset', 'ultrafast',
-                '-crf', '23', temp_output
-            ]
-            process = subprocess.Popen(ffmpeg_cmd, stdin=subprocess.PIPE, stderr=subprocess.DEVNULL)
-            
-            cap = cv2.VideoCapture(video_path)
-            cap.set(cv2.CAP_PROP_POS_FRAMES, f0)
-            
-            trail = []
-            for current_frame_idx in range(f0, f1 + 1):
-                ret, frame = cap.read()
-                if not ret: break
-
-                d = lookup.get(current_frame_idx)
-                if d:
-                    cx, cy = int(d["cx"]), int(d["cy"])
-                    
-                    if mode in ("data", "both"):
-                        x1, y1, x2, y2 = map(int, (d["x1"], d["y1"], d["x2"], d["y2"]))
-                        # Draw Bounding Box
-                        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-                        
-                        # --- Metadata Display (Including Confidence) ---
-                        tid = d.get("track_id", "N/A")
-                        speed = d.get("speed_px_frame", 0.0)
-                        conf = d.get("conf", 0.0) # Added Confidence
-                        
-                        # Added C: for confidence to the label
-                        label = f"ID:{tid} S:{speed:.1f} C:{conf:.2f}"
-                        cv2.putText(frame, label, (x1, y1 - 10), 
-                                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
-                        
-                    trail.append((cx, cy))
-                else:
-                    trail.append(None)
-
-                if len(trail) > 30: trail.pop(0)
-
-                if mode in ("trajectory", "both"):
-                    for j in range(1, len(trail)):
-                        if trail[j] is not None and trail[j - 1] is not None:
-                            if np.linalg.norm(np.subtract(trail[j], trail[j - 1])) < 120:
-                                cv2.line(frame, trail[j - 1], trail[j], (255, 255, 0), 2)
-
-                process.stdin.write(frame.tobytes())
-
-            cap.release()
-            process.stdin.close()
-            process.wait()
-
-        final_clips.append(temp_output)
-
-    # --- BUG FIX: Handle Single or Multiple Clips ---
-    if len(final_clips) == 1:
-        # If only one clip, just move it to the final destination
-        shutil.move(final_clips[0], output_path)
-    elif len(final_clips) > 1:
-        # Concat multiple clips
-        list_path = f"tmp/list_{mode}.txt"
-        with open(list_path, "w") as f:
-            for c in final_clips:
-                f.write(f"file '{Path(c).resolve().as_posix()}'\n")
-        
-        subprocess.run([
-            "ffmpeg", "-y", "-loglevel", "quiet", "-f", "concat", "-safe", "0",
-            "-i", list_path, "-c", "copy", output_path
-        ], check=True, capture_output=True)
-        
-        if os.path.exists(list_path): os.remove(list_path)
-
-    # Cleanup any remaining temp segments
-    for c in final_clips: 
-        if os.path.exists(c): os.remove(c)
-
-
-def run_processing_optimized(segments, video_path, output_path, lookup, mode, fps, width, height):
     """
-    High-performance engine: 
-    - Mode 'none': Direct FFmpeg stream manipulation (Fast + Audio).
-    - Other modes: OpenCV + FFmpeg pipe with audio mapping.
+    The main rendering engine. Supports two distinct paths:
+    1. 'none': Blazing fast lossless-like cutting with audio using FFmpeg filters.
+    2. Other modes: OpenCV drawing + FFmpeg pipe to render data/trajectories.
+
+    Args:
+        segments (list): List of (start_frame, end_frame) tuples to include.
+        video_path (str): Input video path.
+        output_path (str): Where to save the result.
+        lookup (dict): Dictionary mapping frames to tracking data.
+        mode (str): Visualization style ('none', 'data', 'trajectory', 'both').
+        fps, width, height (int/float): Video dimensions and speed.
     """
     
     if mode == "none":
-        # --- PATH A: PURE FFMPEG (No OpenCV, Frame-Perfect with Audio) ---
-        # We create a filter complex to extract the specific segments and concat them
-        # This is much faster and cleaner than temporary files.
+        # --- PATH A: PURE FFMPEG (Stream Manipulation) ---
+        # Extracts and concatenates segments directly. This keeps the audio 
+        # perfectly synced and avoids re-encoding overhead where possible.
         filter_script = ""
         for i, (f0, f1) in enumerate(segments):
             t0, dur = f0 / fps, (f1 - f0 + 1) / fps
@@ -169,19 +85,19 @@ def run_processing_optimized(segments, video_path, output_path, lookup, mode, fp
         subprocess.run(cmd, check=True)
         return
 
-    # --- PATH B: VISUALIZATION (OpenCV + Audio Re-mapping) ---
-    # To get audio while drawing, we pipe frames to FFmpeg AND tell it to pull audio from source
+    # --- PATH B: VISUALIZATION (OpenCV + FFmpeg Pipe) ---
+    # We open a pipe to FFmpeg. We feed it raw frames from OpenCV via stdin,
+    # and FFmpeg merges those frames with the original audio segments.
     ffmpeg_cmd = [
         'ffmpeg', '-y', '-loglevel', 'error',
         '-f', 'rawvideo', '-vcodec', 'rawvideo', '-s', f'{width}x{height}', 
         '-pix_fmt', 'bgr24', '-r', str(fps),
-        '-i', '-',  # Input 0: The frames we are drawing
-        '-i', video_path,  # Input 1: The original file (for audio)
+        '-i', '-',  # Input 0: Raw frames from Python pipe
+        '-i', video_path,  # Input 1: Source video (audio source)
         '-filter_complex', 
-        # Here we collect audio segments from Input 1 to match our frames
         "".join([f"[1:a]atrim=start={f0/fps}:duration={(f1-f0+1)/fps},asetpts=PTS-STARTPTS[a{i}];" for i, (f0, f1) in enumerate(segments)]) +
         "".join([f"[a{i}]" for i in range(len(segments))]) + f"concat=n={len(segments)}:v=0:a=1[outa]",
-        '-map', '0:v', '-map', '[outa]', # Map frames from pipe, audio from concat
+        '-map', '0:v', '-map', '[outa]', 
         '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '23', 
         '-pix_fmt', 'yuv420p', '-c:a', 'aac', output_path
     ]
@@ -191,17 +107,18 @@ def run_processing_optimized(segments, video_path, output_path, lookup, mode, fp
 
     try:
         for f0, f1 in tqdm(segments, desc=f"Visualizing: {mode}"):
+            # Seek to the start of the rally segment
             if int(cap.get(cv2.CAP_PROP_POS_FRAMES)) != f0:
                 cap.set(cv2.CAP_PROP_POS_FRAMES, f0)
             
-            trail = []
+            trail = [] # Stores points for the trajectory 'tail'
             for current_frame_idx in range(f0, f1 + 1):
                 ret, frame = cap.read()
                 if not ret: break
 
-                # Drawing logic
                 d = lookup.get(current_frame_idx)
                 if d:
+                    # Draw Bounding Box and ID/Speed info
                     if mode in ("data", "both"):
                         x1, y1, x2, y2 = map(int, (d["x1"], d["y1"], d["x2"], d["y2"]))
                         cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
@@ -211,12 +128,14 @@ def run_processing_optimized(segments, video_path, output_path, lookup, mode, fp
                 else:
                     trail.append(None)
 
+                # Keep a 30-frame rolling window for the trajectory visual
                 if len(trail) > 30: trail.pop(0)
                 if mode in ("trajectory", "both") and len(trail) > 1:
                     pts = np.array([p for p in trail if p is not None], np.int32).reshape((-1, 1, 2))
                     if len(pts) > 1:
                         cv2.polylines(frame, [pts], False, (255, 255, 0), 2, cv2.LINE_AA)
 
+                # Push the modified frame to FFmpeg's stdin
                 process.stdin.write(frame.tobytes())
     finally:
         cap.release()
@@ -234,8 +153,23 @@ def visualize(
     overlay_mode="both",
     buffer_sec=1.0,
 ):
+    """
+    The public interface to generate highlight reels from tracking and rally data.
+
+    It calculates segment boundaries (adding buffer time to rallies) and calls the 
+    processing engine to generate the final MP4 files.
+
+    Args:
+        video_path (str): Original video file.
+        output_path (str): Desired output filename.
+        tracking_csv (str): CSV with ball coordinates and speeds.
+        predictions_csv (str, optional): CSV with 'Rally' vs 'Downtime' labels.
+        overlay_mode (str): 'both', 'data', 'trajectory', 'none', or 'all'.
+        buffer_sec (float): Extra time to include before/after a rally for context.
+    """
     fps, total_frames, width, height = get_video_properties(video_path)
 
+    # 1. Prepare Tracking Data
     df = pd.read_csv(tracking_csv)
     if "cx" not in df:
         df["cx"] = (df["x1"] + df["x2"]) / 2
@@ -244,17 +178,20 @@ def visualize(
     if "speed_px_frame" not in df and "cx" in df:
         df['speed_px_frame'] = np.sqrt(df['cx'].diff()**2 + df['cy'].diff()**2).fillna(0)
 
+    # Convert to dictionary for O(1) frame lookup during video loop
     lookup = df.set_index("frame").to_dict("index")
 
+    # 2. Segment Generation Logic
     segments = []
     if predictions_csv and os.path.exists(predictions_csv):
         p = pd.read_csv(predictions_csv)
         p["frame"] = p.index.astype(int)
+        # Group consecutive predictions (State segments)
         p["grp"] = (p["label"] != p["label"].shift()).cumsum()
         rallies = p[p["label"] == 1].groupby("grp")["frame"].agg(["min", "max"])
         
         buf_frames = int(buffer_sec * fps)
-        edge_buf_frames = int(3.0 * fps)
+        edge_buf_frames = int(3.0 * fps) # Extra buffer for the very start/end of the match
         
         rally_list = list(rallies.itertuples())
         for idx, r in enumerate(rally_list):
@@ -266,16 +203,21 @@ def visualize(
                 min(total_frames - 1, int(r.max + end_b)),
             ))
     else:
+        # If no predictions provided, process the entire video as one segment
         segments = [(0, total_frames - 1)]
 
+    # 3. Final Execution
     if overlay_mode == "all":
+        # Generate two versions: one with boxes/trajectories and one clean-cut version
         viz_out = output_path.replace(".mp4", "_visualized.mp4")
-        run_processing_optimized(segments, video_path, viz_out, lookup, "both", fps, width, height)
+        run_processing(segments, video_path, viz_out, lookup, "both", fps, width, height)
         
         cut_out = output_path.replace(".mp4", "_cuts_only.mp4")
-        run_processing_optimized(segments, video_path, cut_out, lookup, "none", fps, width, height)
+        run_processing(segments, video_path, cut_out, lookup, "none", fps, width, height)
     else:
+        # Generate the single requested version
         cut_out = output_path.replace(".mp4", "_cuts_only.mp4")
-        run_processing_optimized(segments, video_path, cut_out, lookup, overlay_mode, fps, width, height)
+        run_processing(segments, video_path, cut_out, lookup, overlay_mode, fps, width, height)
 
+    # Cleanup temporary directories
     if os.path.exists("tmp"): shutil.rmtree("tmp")
