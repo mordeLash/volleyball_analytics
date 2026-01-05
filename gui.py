@@ -95,7 +95,7 @@ class VolleyballAnalyticsGUI(ctk.CTk):
         self.stop_dropdown.grid(row=1, column=1, padx=10, pady=10)
         
         ctk.CTkLabel(opt_frame, text="Viz Type:").grid(row=1, column=2, padx=10, pady=10, sticky="w")
-        self.viz_dropdown = ctk.CTkComboBox(opt_frame, values=["none", "both", "tracking", "predictions","all"], variable=self.viz_type)
+        self.viz_dropdown = ctk.CTkComboBox(opt_frame, values=["cut", "both", "tracking", "predictions","all"], variable=self.viz_type)
         self.viz_dropdown.grid(row=1, column=3, padx=10, pady=10)
         
         self.keep_check = ctk.CTkCheckBox(opt_frame, text="Keep Intermediate Files (.csv)", variable=self.keep_all)

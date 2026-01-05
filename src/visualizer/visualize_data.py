@@ -49,7 +49,7 @@ def get_video_properties(video_path):
 def run_processing(segments, video_path, output_path, lookup, mode, fps, width, height):
     """
     The main rendering engine. Supports two distinct paths:
-    1. 'none': Blazing fast lossless-like cutting with audio using FFmpeg filters.
+    1. 'cut': Blazing fast lossless-like cutting with audio using FFmpeg filters.
     2. Other modes: OpenCV drawing + FFmpeg pipe to render data/trajectories.
 
     Args:
@@ -57,11 +57,11 @@ def run_processing(segments, video_path, output_path, lookup, mode, fps, width, 
         video_path (str): Input video path.
         output_path (str): Where to save the result.
         lookup (dict): Dictionary mapping frames to tracking data.
-        mode (str): Visualization style ('none', 'data', 'trajectory', 'both').
+        mode (str): Visualization style ('cut', 'data', 'trajectory', 'both').
         fps, width, height (int/float): Video dimensions and speed.
     """
     
-    if mode == "none":
+    if mode == "cut":
         # --- PATH A: PURE FFMPEG (Stream Manipulation) ---
         # Extracts and concatenates segments directly. This keeps the audio 
         # perfectly synced and avoids re-encoding overhead where possible.
@@ -126,12 +126,12 @@ def run_processing(segments, video_path, output_path, lookup, mode, fps, width, 
                         cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
                     trail.append((int(d["cx"]), int(d["cy"])))
                 else:
-                    trail.append(None)
+                    trail.append(cut)
 
                 # Keep a 30-frame rolling window for the trajectory visual
                 if len(trail) > 30: trail.pop(0)
                 if mode in ("trajectory", "both") and len(trail) > 1:
-                    pts = np.array([p for p in trail if p is not None], np.int32).reshape((-1, 1, 2))
+                    pts = np.array([p for p in trail if p is not cut], np.int32).reshape((-1, 1, 2))
                     if len(pts) > 1:
                         cv2.polylines(frame, [pts], False, (255, 255, 0), 2, cv2.LINE_AA)
 
@@ -164,7 +164,7 @@ def visualize(
         output_path (str): Desired output filename.
         tracking_csv (str): CSV with ball coordinates and speeds.
         predictions_csv (str, optional): CSV with 'Rally' vs 'Downtime' labels.
-        overlay_mode (str): 'both', 'data', 'trajectory', 'none', or 'all'.
+        overlay_mode (str): 'both', 'data', 'trajectory', 'cut', or 'all'.
         buffer_sec (float): Extra time to include before/after a rally for context.
     """
     fps, total_frames, width, height = get_video_properties(video_path)
@@ -213,11 +213,11 @@ def visualize(
         run_processing(segments, video_path, viz_out, lookup, "both", fps, width, height)
         
         cut_out = output_path.replace(".mp4", "_cuts_only.mp4")
-        run_processing(segments, video_path, cut_out, lookup, "none", fps, width, height)
+        run_processing(segments, video_path, cut_out, lookup, "cut", fps, width, height)
     else:
         # Generate the single requested version
         cut_out = output_path.replace(".mp4", "_cuts_only.mp4")
-        run_processing(segments, video_path, cut_out, lookup, overlay_mode, fps, width, height)
+        run_processing(segments, video_path, cut_out, lookup, "cut", fps, width, height)
 
     # Cleanup temporary directories
     if os.path.exists("tmp"): shutil.rmtree("tmp")
