@@ -20,14 +20,18 @@ from src.rally_predictor.predictions_handler import analyze_rally_stats, smooth_
 from src.visualizer.visualize_data import visualize
 
 class VolleyballAnalyticsGUI(ctk.CTk):
-    # ... [__init__ and setup_ui remain the same] ...
     def __init__(self):
         super().__init__()
         self.title("Volleyball Rally Analytics")
         self.geometry("850x750")
         ctk.set_appearance_mode("dark")
+        
+        # 1. Define the default path: ~/Videos/volleyball
+        default_out = os.path.join(os.path.expanduser("~"), "Videos", "volleyball")
+        
         self.video_path = ctk.StringVar()
-        self.output_dir = ctk.StringVar(value="./output")
+        self.output_dir = ctk.StringVar(value=default_out) # Set the default here
+        
         self.device = ctk.StringVar(value="cpu")
         self.rf_model_ver = ctk.StringVar(value="v3")
         self.stop_at = ctk.StringVar(value="visualization")
@@ -36,16 +40,30 @@ class VolleyballAnalyticsGUI(ctk.CTk):
         self.setup_ui()
 
     def setup_ui(self):
-        self.label = ctk.CTkLabel(self, text="Volleyball Analytics Pipeline", font=("Roboto", 24, "bold"))
+        self.label = ctk.CTkLabel(self, text="Volleyball Rally Analytics", font=("Roboto", 24, "bold"))
         self.label.pack(pady=20)
+
+        # --- File Selection Frame ---
         file_frame = ctk.CTkFrame(self)
         file_frame.pack(pady=10, padx=20, fill="x")
-        ctk.CTkLabel(file_frame, text="Input Video:").grid(row=0, column=0, padx=10, pady=10, sticky="w")
+
+        # Row 0: Input Video
+        ctk.CTkLabel(file_frame, text="Input Video:").grid(row=0, column=0, padx=10, pady=5, sticky="w")
         self.video_entry = ctk.CTkEntry(file_frame, textvariable=self.video_path, width=450)
-        self.video_entry.grid(row=0, column=1, padx=10, pady=10)
-        ctk.CTkButton(file_frame, text="Browse", command=self.browse_video, width=100).grid(row=0, column=2, padx=10)
+        self.video_entry.grid(row=0, column=1, padx=10, pady=5)
+        ctk.CTkButton(file_frame, text="Browse Video", command=self.browse_video, width=120).grid(row=0, column=2, padx=10)
+
+        # Row 1: Output Directory (NEW)
+        ctk.CTkLabel(file_frame, text="Output Folder:").grid(row=1, column=0, padx=10, pady=5, sticky="w")
+        self.output_entry = ctk.CTkEntry(file_frame, textvariable=self.output_dir, width=450)
+        self.output_entry.grid(row=1, column=1, padx=10, pady=5)
+        ctk.CTkButton(file_frame, text="Browse Folder", command=self.browse_output, width=120).grid(row=1, column=2, padx=10)
+
+        # --- Options Frame ---
         opt_frame = ctk.CTkFrame(self)
         opt_frame.pack(pady=10, padx=20, fill="x")
+        
+        # ... [Rest of your opt_frame setup remains the same] ...
         ctk.CTkLabel(opt_frame, text="RF Model:").grid(row=0, column=0, padx=10, pady=10, sticky="w")
         self.rf_dropdown = ctk.CTkComboBox(opt_frame, values=["v1", "v2", "v3", "v4"], variable=self.rf_model_ver)
         self.rf_dropdown.grid(row=0, column=1, padx=10, pady=10)
@@ -60,9 +78,12 @@ class VolleyballAnalyticsGUI(ctk.CTk):
         self.viz_dropdown.grid(row=1, column=3, padx=10, pady=10)
         self.keep_check = ctk.CTkCheckBox(opt_frame, text="Keep Intermediate Files (.csv)", variable=self.keep_all)
         self.keep_check.grid(row=2, column=0, columnspan=2, padx=10, pady=10)
+
+        # --- Logging and Run ---
         self.log_text = ctk.CTkTextbox(self, height=250, width=750)
         self.log_text.pack(pady=20, padx=20)
         self.log_text.configure(state="disabled")
+
         self.run_button = ctk.CTkButton(self, text="Start Pipeline", command=self.start_pipeline_thread, fg_color="#1f538d", hover_color="#14375e", height=40, font=("Roboto", 16, "bold"))
         self.run_button.pack(pady=10)
 
@@ -70,6 +91,12 @@ class VolleyballAnalyticsGUI(ctk.CTk):
         filename = filedialog.askopenfilename(filetypes=[("Video files", "*.mp4 *.avi *.mov")])
         if filename:
             self.video_path.set(filename)
+
+    def browse_output(self):
+        """Method to pick the base directory for outputs"""
+        foldername = filedialog.askdirectory()
+        if foldername:
+            self.output_dir.set(foldername)
 
     def log(self, message):
         self.log_text.configure(state="normal")

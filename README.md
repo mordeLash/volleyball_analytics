@@ -2,7 +2,7 @@
 
 This project provides an automated computer vision pipeline for analyzing volleyball match footage. It tracks ball movement to distinguish between active rallies and downtime, facilitating automated play-time extraction and cool visualization.
 
-<img src="./assets/track_clip1.gif" alt="cut clip1" width="400"/> <img src="./assets/track_clip2.gif" alt="track clip2" width="400"/>
+<img src="./assets/track_clip1.gif" alt="cut clip1" width="400"/> <img src="./assets/track_clip3.gif" alt="track clip2" width="400"/>
 
 
 ## 📑 Pipeline Stages
