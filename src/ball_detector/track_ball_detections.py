@@ -100,7 +100,7 @@ def track_with_physics_predictive(input_csv, output_csv, min_radius=50, max_radi
                     stationary_count = 0 # Object moved, reset counter
                 
                 # If object hasn't moved significantly for 30 frames, mark as static
-                is_static = stationary_count >= 30
+                is_static = stationary_count >= 15
                 
                 # Update Velocity (pixels per frame)
                 dx, dy = new_pos[0] - last_info['last_pos'][0], new_pos[1] - last_info['last_pos'][1]

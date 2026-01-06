@@ -68,38 +68,58 @@ def run_processing(segments, video_path, output_path, lookup, mode, fps, width, 
         filter_script = ""
         for i, (f0, f1) in enumerate(segments):
             t0, dur = f0 / fps, (f1 - f0 + 1) / fps
+            # Video segment
             filter_script += f"[0:v]trim=start={t0}:duration={dur},setpts=PTS-STARTPTS[v{i}]; "
-            filter_script += f"[0:a]atrim=start={t0}:duration={dur},asetpts=PTS-STARTPTS[a{i}]; "
-        
-        concat_v = "".join([f"[v{i}]" for i in range(len(segments))])
-        concat_a = "".join([f"[a{i}]" for i in range(len(segments))])
-        filter_script += f"{concat_v}concat=n={len(segments)}:v=1:a=0[outv]; "
-        filter_script += f"{concat_a}concat=n={len(segments)}:v=0:a=1[outa]"
+            # Audio segment + Resampling to prevent sync drift
+            filter_script += f"[0:a]atrim=start={t0}:duration={dur},asetpts=PTS-STARTPTS,aresample=async=1[a{i}]; "
+
+        concat_inputs = "".join([f"[v{i}][a{i}]" for i in range(len(segments))])
+        filter_script += f"{concat_inputs}concat=n={len(segments)}:v=1:a=1[outv][outa]"
 
         cmd = [
-            "ffmpeg", "-y", "-loglevel", "error", "-i", video_path,
+            "ffmpeg", "-y", "-i", video_path,
             "-filter_complex", filter_script,
             "-map", "[outv]", "-map", "[outa]",
-            "-c:v", "libx264", "-crf", "18", "-c:a", "aac", output_path
+            "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+            "-c:a", "aac", "-b:a", "192k", output_path
         ]
-        subprocess.run(cmd, check=True)
+        subprocess.run(cmd, check=True,stdout=subprocess.DEVNULL, 
+    stderr=subprocess.DEVNULL)
         return
 
     # --- PATH B: VISUALIZATION (OpenCV + FFmpeg Pipe) ---
     # We open a pipe to FFmpeg. We feed it raw frames from OpenCV via stdin,
     # and FFmpeg merges those frames with the original audio segments.
+    # Calculate total frames for audio segments to ensure duration matches video
+    filter_parts = []
+    for i, (f0, f1) in enumerate(segments):
+        t0 = f0 / fps
+        # Using duration based on frames ensures the audio segment 
+        # is exactly as long as the frames you are pushing
+        dur = (f1 - f0 + 1) / fps 
+        filter_parts.append(
+            f"[1:a]atrim=start={t0}:duration={dur},asetpts=PTS-STARTPTS,aresample=async=1[a{i}];"
+        )
+
+    audio_concat = "".join([f"[a{i}]" for i in range(len(segments))])
+    filter_script = "".join(filter_parts) + f"{audio_concat}concat=n={len(segments)}:v=0:a=1[outa]"
+
     ffmpeg_cmd = [
         'ffmpeg', '-y', '-loglevel', 'error',
+        # Input 0: Raw frames pipe
         '-f', 'rawvideo', '-vcodec', 'rawvideo', '-s', f'{width}x{height}', 
         '-pix_fmt', 'bgr24', '-r', str(fps),
-        '-i', '-',  # Input 0: Raw frames from Python pipe
-        '-i', video_path,  # Input 1: Source video (audio source)
-        '-filter_complex', 
-        "".join([f"[1:a]atrim=start={f0/fps}:duration={(f1-f0+1)/fps},asetpts=PTS-STARTPTS[a{i}];" for i, (f0, f1) in enumerate(segments)]) +
-        "".join([f"[a{i}]" for i in range(len(segments))]) + f"concat=n={len(segments)}:v=0:a=1[outa]",
-        '-map', '0:v', '-map', '[outa]', 
-        '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '23', 
-        '-pix_fmt', 'yuv420p', '-c:a', 'aac', output_path
+        '-i', '-',  
+        # Input 1: Source video
+        '-i', video_path, 
+        '-filter_complex', filter_script,
+        '-map', '0:v',          # Take video from pipe
+        '-map', '[outa]',       # Take audio from filter
+        '-c:v', 'libx264', '-preset', 'fast', '-crf', '23', 
+        '-pix_fmt', 'yuv420p', 
+        '-c:a', 'aac', '-b:a', '192k',
+        '-shortest',            # CRITICAL: Cuts the file if one stream ends before the other
+        output_path
     ]
     
     cap = cv2.VideoCapture(video_path)
@@ -122,16 +142,16 @@ def run_processing(segments, video_path, output_path, lookup, mode, fps, width, 
                     if mode in ("data", "both"):
                         x1, y1, x2, y2 = map(int, (d["x1"], d["y1"], d["x2"], d["y2"]))
                         cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-                        label = f"ID:{d.get('track_id','N/A')} S:{d.get('speed_px_frame',0):.1f}"
+                        label = f"ID:{d.get('track_id','N/A')} S:{d.get('conf',0):.1f}"
                         cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
                     trail.append((int(d["cx"]), int(d["cy"])))
                 else:
-                    trail.append(cut)
+                    trail.append(None)
 
                 # Keep a 30-frame rolling window for the trajectory visual
                 if len(trail) > 30: trail.pop(0)
                 if mode in ("trajectory", "both") and len(trail) > 1:
-                    pts = np.array([p for p in trail if p is not cut], np.int32).reshape((-1, 1, 2))
+                    pts = np.array([p for p in trail if p is not None], np.int32).reshape((-1, 1, 2))
                     if len(pts) > 1:
                         cv2.polylines(frame, [pts], False, (255, 255, 0), 2, cv2.LINE_AA)
 
@@ -151,7 +171,7 @@ def visualize(
     tracking_csv,
     predictions_csv=None,
     overlay_mode="both",
-    buffer_sec=1.0,
+    buffer_sec=1.5,
 ):
     """
     The public interface to generate highlight reels from tracking and rally data.
@@ -217,7 +237,7 @@ def visualize(
     else:
         # Generate the single requested version
         cut_out = output_path.replace(".mp4", "_cuts_only.mp4")
-        run_processing(segments, video_path, cut_out, lookup, "cut", fps, width, height)
+        run_processing(segments, video_path, cut_out, lookup, overlay_mode, fps, width, height)
 
     # Cleanup temporary directories
     if os.path.exists("tmp"): shutil.rmtree("tmp")

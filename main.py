@@ -11,7 +11,7 @@ from src.utils import get_resource_path
 # Pipeline stage imports
 from src.ball_detector.get_ball_detections import get_ball_detections
 from src.ball_detector.track_ball_detections import track_with_physics_predictive
-from src.ball_detector.clean_tracking_data import clean_noise
+from src.ball_detector.clean_tracking_data import clean_noise, clean_noise_v2
 from src.rally_predictor.extract_features import extract_features
 from src.rally_predictor.rf_predictor import predict_rallies
 from src.rally_predictor.predictions_handler import analyze_rally_stats, smooth_predictions
@@ -145,7 +145,7 @@ def main():
     # 3. Cleaning: Filters out static noise and resolve overlaps
     if not is_already_provided(args.input_clean, "cleaning"):
         print("--- Cleaning Tracking Data ---")
-        clean_noise(tracking_csv=fn_tracks, output_csv=fn_clean)
+        clean_noise_v2(tracking_csv=fn_tracks, output_csv=fn_clean)
     should_stop("cleaning", tracking_file=fn_clean)
 
     # 4. Features: Calculate kinematics for RF classification
