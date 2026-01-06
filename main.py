@@ -6,12 +6,12 @@ import sys
 import yaml
 
 # Utility for relative-to-absolute path resolution
-from src.utils import get_resource_path
+from src.utils.utils import get_resource_path
 
 # Pipeline stage imports
 from src.ball_detector.get_ball_detections import get_ball_detections
 from src.ball_detector.track_ball_detections import track_with_physics_predictive
-from src.ball_detector.clean_tracking_data import clean_noise, clean_noise_v2
+from src.ball_detector.clean_tracking_data import clean_noise_v2
 from src.rally_predictor.extract_features import extract_features
 from src.rally_predictor.rf_predictor import predict_rallies
 from src.rally_predictor.predictions_handler import analyze_rally_stats, smooth_predictions

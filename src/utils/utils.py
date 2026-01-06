@@ -1,4 +1,4 @@
-# src/utils.py
+# src/utils/utils.py
 import sys
 import os
 
@@ -24,8 +24,9 @@ def get_resource_path(relative_path):
     except AttributeError:
         # DEVELOPMENT MODE:
         # If _MEIPASS doesn't exist, we are running as a standard script.
-        # We calculate the project root by going two levels up from this file 
-        # (assuming this utility is located in project_root/src/utils.py).
-        base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        # This file is located at project_root/src/utils/utils.py
+        # Go up three levels: utils.py -> src/ -> project_root/
+        base_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        print(f"Development mode: base path set to {base_path}")
 
     return os.path.join(base_path, relative_path)

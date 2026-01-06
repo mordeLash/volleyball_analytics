@@ -7,45 +7,7 @@ import pandas as pd
 import numpy as np
 from tqdm import tqdm
 from pathlib import Path
-
-# -----------------------------
-# HELPERS
-# -----------------------------
-def get_video_properties(video_path):
-    """
-    Extracts core metadata from a video file using ffprobe.
-
-    Args:
-        video_path (str): Path to the source video.
-
-    Returns:
-        tuple: (fps, total_frames, width, height)
-    """
-    cmd = [
-        "ffprobe", "-v", "error",
-        "-select_streams", "v:0",
-        "-show_entries", "stream=r_frame_rate,nb_frames,width,height,duration",
-        "-of", "json",
-        video_path
-    ]
-    p = subprocess.run(cmd, capture_output=True, text=True, check=True)
-    s = json.loads(p.stdout)["streams"][0]
-
-    # Handle frame rate fractions (e.g., '30000/1001')
-    num, den = map(int, s["r_frame_rate"].split("/"))
-    fps = num / den
-    width = int(s["width"])
-    height = int(s["height"])
-
-    # Fallback for total frames if nb_frames is missing from metadata
-    if "nb_frames" in s:
-        total_frames = int(s["nb_frames"])
-    else:
-        total_frames = int(float(s["duration"]) * fps)
-
-    return fps, total_frames, width, height
-
-
+from src.utils.manipulate_video import get_video_properties
 def run_processing(segments, video_path, output_path, lookup, mode, fps, width, height):
     """
     The main rendering engine. Supports two distinct paths:
