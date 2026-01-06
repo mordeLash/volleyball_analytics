@@ -8,6 +8,7 @@ import numpy as np
 from tqdm import tqdm
 from pathlib import Path
 from src.utils.manipulate_video import get_video_properties
+from src.utils.utils import get_bin_path
 def run_processing(segments, video_path, output_path, lookup, mode, fps, width, height):
     """
     The main rendering engine. Supports two distinct paths:
@@ -22,7 +23,7 @@ def run_processing(segments, video_path, output_path, lookup, mode, fps, width, 
         mode (str): Visualization style ('cut', 'data', 'trajectory', 'both').
         fps, width, height (int/float): Video dimensions and speed.
     """
-    
+    ffmpeg_bin = get_bin_path("ffmpeg")
     if mode == "cut":
         # --- PATH A: PURE FFMPEG (Stream Manipulation) ---
         # Extracts and concatenates segments directly. This keeps the audio 
@@ -37,9 +38,9 @@ def run_processing(segments, video_path, output_path, lookup, mode, fps, width, 
 
         concat_inputs = "".join([f"[v{i}][a{i}]" for i in range(len(segments))])
         filter_script += f"{concat_inputs}concat=n={len(segments)}:v=1:a=1[outv][outa]"
-
+        
         cmd = [
-            "ffmpeg", "-y", "-i", video_path,
+            ffmpeg_bin, "-y", "-i", video_path,
             "-filter_complex", filter_script,
             "-map", "[outv]", "-map", "[outa]",
             "-c:v", "libx264", "-preset", "fast", "-crf", "23",
@@ -67,7 +68,7 @@ def run_processing(segments, video_path, output_path, lookup, mode, fps, width, 
     filter_script = "".join(filter_parts) + f"{audio_concat}concat=n={len(segments)}:v=0:a=1[outa]"
 
     ffmpeg_cmd = [
-        'ffmpeg', '-y', '-loglevel', 'error',
+        ffmpeg_bin, '-y', '-loglevel', 'error',
         # Input 0: Raw frames pipe
         '-f', 'rawvideo', '-vcodec', 'rawvideo', '-s', f'{width}x{height}', 
         '-pix_fmt', 'bgr24', '-r', str(fps),

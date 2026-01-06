@@ -11,7 +11,7 @@ __pycache__/
 .pytest_cache/
 dist/
 build/
-
+bin/
 
 # Video files and datasets
 *.mp4

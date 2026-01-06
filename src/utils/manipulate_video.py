@@ -2,6 +2,7 @@ import json
 import subprocess
 import cv2
 
+from .utils import get_bin_path
 def get_video_properties(video_path):
     """
     Extracts core metadata from a video file using ffprobe.
@@ -12,8 +13,10 @@ def get_video_properties(video_path):
     Returns:
         tuple: (fps, total_frames, width, height)
     """
+    ffprobe_bin = get_bin_path("ffprobe")
+
     cmd = [
-        "ffprobe", "-v", "error",
+        ffprobe_bin, "-v", "error",
         "-select_streams", "v:0",
         "-show_entries", "stream=r_frame_rate,nb_frames,width,height,duration",
         "-of", "json",
@@ -42,11 +45,11 @@ def ensure_30fps(input_path, output_path, log_func):
     cap = cv2.VideoCapture(input_path)
     fps = cap.get(cv2.CAP_PROP_FPS)
     cap.release()
-
+    ffmpeg_bin = get_bin_path("ffmpeg")
     if fps > 30.5:
         log_func(f"Video FPS is {fps:.2f}. Downsampling to 30 FPS (Re-encoding)...")
         cmd = [
-            "ffmpeg", "-y",
+            ffmpeg_bin, "-y",
             "-i", input_path,
             "-filter:v", "fps=fps=30,setpts=N/FRAME_RATE/TB",  # Reset timestamps!
             "-c:a", "copy",
@@ -62,20 +65,28 @@ def ensure_30fps(input_path, output_path, log_func):
     return input_path
 
 def trim_video(input_path, output_path, start_time, end_time, log_func):
-    """Cuts a section of the video using FFmpeg."""
+    """Cuts a section of the video using FFmpeg with frame accuracy."""
     if not start_time and not end_time:
         return input_path
     
     log_func(f"Trimming video: {start_time or '00:00:00'} to {end_time or 'End'}")
+    ffmpeg_bin = get_bin_path("ffmpeg")
+    cmd = [ffmpeg_bin, '-y']
     
-    cmd = ['ffmpeg', '-y', '-i', input_path]
+    # Put -ss AFTER -i for frame-accurate seeking (slower but precise)
+    cmd.extend(['-i', input_path])
+    
     if start_time:
         cmd.extend(['-ss', start_time])
     if end_time:
         cmd.extend(['-to', end_time])
     
-    # Use copy codec for speed, but note it might not be frame-accurate at exact timestamps
-    cmd.extend(['-c', 'copy', output_path])
+    # Re-encode for frame accuracy
+    cmd.extend([
+        '-c:v', 'libx264', '-crf', '18', '-preset', 'fast',
+        '-c:a', 'aac', '-b:a', '192k',
+        output_path
+    ])
     
     subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
     return output_path

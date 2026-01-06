@@ -30,8 +30,21 @@ class VolleyballAnalyticsGUI(ctk.CTk):
     def __init__(self):
         super().__init__()
         self.title("Volleyball Rally Analytics")
-        self.geometry("850x850") # Slightly taller to fit new inputs
+        self.geometry("850x850")
         ctk.set_appearance_mode("dark")
+
+        try:
+            # Use your existing utility to get the absolute path
+            icon_path = get_resource_path(os.path.join("assets", "icon.ico"))
+            
+            # For Windows (.ico files)
+            if sys.platform.startswith('win'):
+                self.iconbitmap(icon_path)
+            else:
+                # For Linux/Mac (.png files)
+                pass
+        except Exception as e:
+            print(f"Icon could not be loaded: {e}")
         
         default_out = os.path.join(os.path.expanduser("~"), "Videos", "volleyball")
         
@@ -53,6 +66,11 @@ class VolleyballAnalyticsGUI(ctk.CTk):
     def setup_ui(self):
         self.label = ctk.CTkLabel(self, text="Volleyball Rally Analytics", font=("Roboto", 24, "bold"))
         self.label.pack(pady=20)
+
+        # --- icon image loading ---
+        # icon_image = ctk.CTkImage(light_image=Image.open(get_resource_path("assets/play_icon.png")),
+        #                  dark_image=Image.open(get_resource_path("assets/play_icon.png")),
+        #                  size=(20, 20))
 
         # --- File Selection ---
         file_frame = ctk.CTkFrame(self)

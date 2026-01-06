@@ -30,3 +30,11 @@ def get_resource_path(relative_path):
         print(f"Development mode: base path set to {base_path}")
 
     return os.path.join(base_path, relative_path)
+
+
+def get_bin_path(command=""):
+    # If running as a PyInstaller bundle
+    if hasattr(sys, '_MEIPASS'):
+        return os.path.join(sys._MEIPASS, 'bin/' + command +'.exe')
+    # If running in development
+    return command
