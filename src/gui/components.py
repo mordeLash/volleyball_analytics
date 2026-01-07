@@ -62,10 +62,11 @@ class AdvancedOptionsFrame(ctk.CTkFrame):
         ctk.CTkLabel(self, text="Trim End:").grid(row=3, column=2, padx=10, pady=10, sticky="w")
         ctk.CTkEntry(self, textvariable=variables['end_time'], placeholder_text="00:00:45").grid(row=3, column=3, padx=10, pady=10, sticky="ew")
 
-        # --- Row 4: Keep Files & Viz Early ---
-        ctk.CTkCheckBox(self, text="Keep Intermediate Files", variable=variables['keep_all']).grid(row=4, column=0, columnspan=2, padx=10, pady=10, sticky="w")
-        ctk.CTkCheckBox(self, text="Visualize Early (on Stop)", variable=variables['viz_early']).grid(row=4, column=2, columnspan=2, padx=10, pady=10, sticky="w")
-        ctk.CTkCheckBox(self, text="Visualize Type", variable=variables['viz_type']).grid(row=4, column=2, columnspan=2, padx=10, pady=10, sticky="w")
+        # --- Row 4: Keep Files & Viz ---
+        viz_types = ["all", "cut", "both", "data", "trajectory"]
+        ctk.CTkCheckBox(self, text="Keep Intermediate Files", variable=variables['keep_all']).grid(row=4, column=0, columnspan=3, padx=10, pady=10, sticky="w")
+        ctk.CTkCheckBox(self, text="Visualize Early (on Stop)", variable=variables['viz_early']).grid(row=4, column=2, columnspan=3, padx=10, pady=10, sticky="w")
+        ctk.CTkComboBox(self, values=viz_types, variable=variables['viz_type']).grid(row=4, column=1, padx=10, pady=10, sticky="ew")
 
     def browse_csv(self):
         path = filedialog.askopenfilename(filetypes=[("CSV files", "*.csv")])
