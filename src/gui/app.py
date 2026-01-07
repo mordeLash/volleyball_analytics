@@ -10,7 +10,7 @@ from src.gui.components import FilePicker, AdvancedOptionsFrame
 class VolleyballAnalyticsGUI(ctk.CTk):
     def __init__(self):
         super().__init__()
-        self.title("Volleyball Rally Analytics")
+        self.title("Volleyball Playtime Extractor")
         self.geometry("850x900")
         ctk.set_appearance_mode("dark")
         
@@ -34,8 +34,11 @@ class VolleyballAnalyticsGUI(ctk.CTk):
 
     def setup_ui(self):
         # Title
-        self.label = ctk.CTkLabel(self, text="Volleyball Rally Analytics", font=("Roboto", 24, "bold"))
+        self.label = ctk.CTkLabel(self, text="Volleyball Playtime Extractor", font=("Roboto", 24, "bold"))
         self.label.pack(pady=20)
+
+        #Icon
+        self.iconbitmap("./assets/volleyball_app.ico")
 
         # File Selection Section
         self.video_picker = FilePicker(self, "Input Video:", self.video_path, mode="file")

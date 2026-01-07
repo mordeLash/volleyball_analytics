@@ -13,4 +13,4 @@ def create_ico(input_path, output_path):
     print(f"Icon saved successfully to {output_path}")
 
 # Run the function
-create_ico("./assets/volleyball_logo.png", "./assets/volleyball_app.ico")
+create_ico("./assets/installer_logo.png", "./assets/installer_logo.ico")
