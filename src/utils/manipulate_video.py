@@ -83,7 +83,7 @@ def trim_video(input_path, output_path, start_time, end_time, log_func):
     
     # Re-encode for frame accuracy
     cmd.extend([
-        '-c:v', 'libx264', '-crf', '18', '-preset', 'fast',
+        '-c:v', 'libx264', '-crf', '23', '-preset', 'fast',
         '-c:a', 'aac', '-b:a', '192k',
         output_path
     ])

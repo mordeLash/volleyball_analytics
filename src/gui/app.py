@@ -1,0 +1,129 @@
+# src/gui/app.py
+
+import os
+import threading
+import customtkinter as ctk
+from tkinter import messagebox
+from src.pipeline.manager import run_volleyball_pipeline
+from src.gui.components import FilePicker, AdvancedOptionsFrame
+
+class VolleyballAnalyticsGUI(ctk.CTk):
+    def __init__(self):
+        super().__init__()
+        self.title("Volleyball Rally Analytics")
+        self.geometry("850x900")
+        ctk.set_appearance_mode("dark")
+        
+        # State Variables
+        self.video_path = ctk.StringVar()
+        self.output_dir = ctk.StringVar(value=os.path.join(os.path.expanduser("~"), "Videos", "volleyball"))
+        self.device = ctk.StringVar(value="intel:gpu")
+        self.rf_model_ver = ctk.StringVar(value="v3")
+        self.start_at = ctk.StringVar(value="detection")
+        self.stop_at = ctk.StringVar(value="visualization")
+        self.viz_type = ctk.StringVar(value="both")
+        self.keep_all = ctk.BooleanVar(value=True)
+        self.start_time = ctk.StringVar(value="")
+        self.end_time = ctk.StringVar(value="")
+        self.input_csv_path = ctk.StringVar(value="")
+        self.viz_early = ctk.BooleanVar(value=False)
+        
+        self.show_advanced = False
+        
+        self.setup_ui()
+
+    def setup_ui(self):
+        # Title
+        self.label = ctk.CTkLabel(self, text="Volleyball Rally Analytics", font=("Roboto", 24, "bold"))
+        self.label.pack(pady=20)
+
+        # File Selection Section
+        self.video_picker = FilePicker(self, "Input Video:", self.video_path, mode="file")
+        self.video_picker.pack(pady=5, padx=20, fill="x")
+
+        self.output_picker = FilePicker(self, "Output Folder:", self.output_dir, mode="folder")
+        self.output_picker.pack(pady=5, padx=20, fill="x")
+
+        # --- Advanced Options Toggle ---
+        self.adv_toggle_btn = ctk.CTkButton(self, text="▶ Advanced Options", fg_color="transparent", 
+                                            text_color=("gray10", "gray90"), anchor="w", 
+                                            command=self.toggle_advanced)
+        self.adv_toggle_btn.pack(pady=(10, 0), padx=20, fill="x")
+
+        # Pass EVERYTHING to the advanced frame now
+        adv_vars = {
+            'rf_model_ver': self.rf_model_ver,
+            'device': self.device,
+            'start_at': self.start_at,       
+            'stop_at': self.stop_at,
+            'input_csv_path': self.input_csv_path, 
+            'viz_early': self.viz_early,     
+            'keep_all': self.keep_all,
+            'viz_type': self.viz_type,
+            'start_time': self.start_time,
+            'end_time': self.end_time
+        }
+        self.adv_frame = AdvancedOptionsFrame(self, adv_vars)
+
+        # Logging Box
+        self.log_text = ctk.CTkTextbox(self, height=250)
+        self.log_text.pack(pady=20, padx=20, fill="both", expand=True)
+        self.log_text.configure(state="disabled")
+
+        # Execution Button
+        self.run_button = ctk.CTkButton(self, text="Start Pipeline", command=self.start_pipeline_thread, 
+                                        fg_color="#1f538d", hover_color="#14375e", height=40, font=("Roboto", 16, "bold"))
+        self.run_button.pack(pady=20)
+
+        
+    def toggle_advanced(self):
+        if self.show_advanced:
+            self.adv_frame.pack_forget()
+            self.adv_toggle_btn.configure(text="▶ Advanced Options")
+        else:
+            self.adv_frame.pack(pady=5, padx=20, fill="x", after=self.adv_toggle_btn)
+            self.adv_toggle_btn.configure(text="▼ Advanced Options")
+        self.show_advanced = not self.show_advanced
+
+    def log(self, message):
+        self.log_text.configure(state="normal")
+        self.log_text.insert("end", message + "\n")
+        self.log_text.see("end")
+        self.log_text.configure(state="disabled")
+
+    def start_pipeline_thread(self):
+        if not self.video_path.get():
+            messagebox.showerror("Error", "Please select a video file.")
+            return
+        
+        config = {
+            'video_path': self.video_path.get(),
+            'output_dir': self.output_dir.get(),
+            'device': self.device.get(),
+            'rf_model_ver': self.rf_model_ver.get(),
+            'start_at': self.start_at.get(),
+            'stop_at': self.stop_at.get(),
+            'input_csv_path': self.input_csv_path.get(),
+            'viz_early': self.viz_early.get(),         
+            'viz_type': self.viz_type.get(),
+            'keep_all': self.keep_all.get(),
+            'start_time': self.start_time.get(),
+            'end_time': self.end_time.get()
+        }
+
+        self.run_button.configure(state="disabled", text="Processing...")
+        thread = threading.Thread(target=self.execute_run, args=(config,))
+        thread.daemon = True
+        thread.start()
+
+    def execute_run(self, config):
+        try:
+            success, output_path = run_volleyball_pipeline(config, self.log)
+            if success:
+                self.log("Pipeline Finished Successfully!")
+                messagebox.showinfo("Success", f"Pipeline complete!\nSaved to: {output_path}")
+        except Exception as e:
+            self.log(f"ERROR: {str(e)}")
+            messagebox.showerror("Pipeline Error", str(e))
+        finally:
+            self.run_button.configure(state="normal", text="Start Pipeline")

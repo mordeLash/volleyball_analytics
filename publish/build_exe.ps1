@@ -8,6 +8,7 @@ uv run pyinstaller --noconfirm --onedir `
   --add-data "src;src" `
   --add-data "bin/ffmpeg.exe;bin" `
   --add-data "bin/ffprobe.exe;bin" `
+  --add-data "assets/icon.ico;assets" `
   --collect-all ultralytics `
   --collect-all openvino `
   --collect-all cv2 `
