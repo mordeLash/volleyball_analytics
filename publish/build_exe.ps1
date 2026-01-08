@@ -1,8 +1,8 @@
 # build_exe.ps1
 # PowerShell script to build the VolleyballAnalytics executable using PyInstaller
 
-uv run pyinstaller --noconfirm --onedir `
-  --name "VolleyballAnalytics" `
+uv run pyinstaller --noconfirm --onedir --windowed `
+  --name "Volleyball Playtime Extractor" `
   --icon "assets/volleyball_app.ico" `
   --add-data "models;models" `
   --add-data "src;src" `

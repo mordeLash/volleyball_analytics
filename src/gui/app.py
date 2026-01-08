@@ -6,6 +6,7 @@ import customtkinter as ctk
 from tkinter import messagebox
 from src.pipeline.manager import run_volleyball_pipeline
 from src.gui.components import FilePicker, AdvancedOptionsFrame
+from src.utils import get_resource_path
 
 class VolleyballAnalyticsGUI(ctk.CTk):
     def __init__(self):
@@ -38,7 +39,8 @@ class VolleyballAnalyticsGUI(ctk.CTk):
         self.label.pack(pady=20)
 
         #Icon
-        self.iconbitmap("./assets/volleyball_app.ico")
+        icon_path = get_resource_path(os.path.join("assets", "volleyball_app.ico"))
+        self.iconbitmap(icon_path)
 
         # File Selection Section
         self.video_picker = FilePicker(self, "Input Video:", self.video_path, mode="file")
