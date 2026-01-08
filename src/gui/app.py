@@ -6,6 +6,7 @@ import customtkinter as ctk
 from tkinter import messagebox
 from src.pipeline.manager import run_volleyball_pipeline
 from src.gui.components import FilePicker, AdvancedOptionsFrame
+from src.utils import get_resource_path
 
 class VolleyballAnalyticsGUI(ctk.CTk):
     def __init__(self):
@@ -15,18 +16,18 @@ class VolleyballAnalyticsGUI(ctk.CTk):
         ctk.set_appearance_mode("dark")
         
         # State Variables
-        self.video_path = ctk.StringVar()
-        self.output_dir = ctk.StringVar(value=os.path.join(os.path.expanduser("~"), "Videos", "volleyball"))
-        self.device = ctk.StringVar(value="intel:gpu")
-        self.rf_model_ver = ctk.StringVar(value="v3")
-        self.start_at = ctk.StringVar(value="detection")
-        self.stop_at = ctk.StringVar(value="visualization")
-        self.viz_type = ctk.StringVar(value="cut")
-        self.keep_all = ctk.BooleanVar(value=False)
-        self.start_time = ctk.StringVar(value="00:00:00")
-        self.end_time = ctk.StringVar(value="00:00:00")
-        self.input_csv_path = ctk.StringVar(value="")
-        self.viz_early = ctk.BooleanVar(value=False)
+        self.video_path = ctk.StringVar(self)
+        self.output_dir = ctk.StringVar(self, value=os.path.join(os.path.expanduser("~"), "Videos", "volleyball"))
+        self.device = ctk.StringVar(self, value="intel:gpu")
+        self.rf_model_ver = ctk.StringVar(self, value="v3")
+        self.start_at = ctk.StringVar(self, value="detection")
+        self.stop_at = ctk.StringVar(self, value="visualization")
+        self.viz_type = ctk.StringVar(self, value="cut")
+        self.keep_all = ctk.BooleanVar(self, value=False)
+        self.start_time = ctk.StringVar(self, value="00:00:00")
+        self.end_time = ctk.StringVar(self, value="00:00:00")
+        self.input_csv_path = ctk.StringVar(self, value="")
+        self.viz_early = ctk.BooleanVar(self, value=False)
         
         self.show_advanced = False
         
@@ -38,7 +39,8 @@ class VolleyballAnalyticsGUI(ctk.CTk):
         self.label.pack(pady=20)
 
         #Icon
-        self.iconbitmap("./assets/volleyball_app.ico")
+        icon_path = get_resource_path(os.path.join("assets", "volleyball_app.ico"))
+        self.iconbitmap(icon_path)
 
         # File Selection Section
         self.video_picker = FilePicker(self, "Input Video:", self.video_path, mode="file")
@@ -77,7 +79,7 @@ class VolleyballAnalyticsGUI(ctk.CTk):
         self.adv_frame = AdvancedOptionsFrame(self, adv_vars)
 
         # Logging Box
-        self.log_text = ctk.CTkTextbox(self, height=100)
+        self.log_text = ctk.CTkTextbox(self, height=0)
         self.log_text.pack(pady=20, padx=20, fill="both", expand=True)
         self.log_text.configure(state="disabled")
 

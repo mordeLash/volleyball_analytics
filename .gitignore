@@ -23,4 +23,4 @@ bin/
 output/table_data
 output/temp
 .env
-VolleyballAnalytics.spec
+*.spec

@@ -5,6 +5,8 @@ import subprocess
 import cv2
 
 from .utils import get_bin_path
+from src.utils.utils import CREATE_NO_WINDOW
+
 def get_video_properties(video_path):
     """
     Extracts core metadata from a video file using ffprobe.
@@ -24,7 +26,7 @@ def get_video_properties(video_path):
         "-of", "json",
         video_path
     ]
-    p = subprocess.run(cmd, capture_output=True, text=True, check=True)
+    p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, universal_newlines=True,creationflags=CREATE_NO_WINDOW)
     s = json.loads(p.stdout)["streams"][0]
 
     # Handle frame rate fractions (e.g., '30000/1001')
@@ -68,7 +70,7 @@ def ensure_30fps(input_path, output_path, log_func):
         ]
         
         try:
-            subprocess.run(cmd, check=True, capture_output=True, text=True)
+            subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, universal_newlines=True,creationflags=CREATE_NO_WINDOW)
             return output_path
         except subprocess.CalledProcessError as e:
             log_func(f"Error during FPS conversion: {e.stderr}")
@@ -106,5 +108,5 @@ def trim_video(input_path, output_path, start_time, end_time, log_func):
         output_path
     ])
     
-    subprocess.run(cmd, capture_output=True, check=True)
+    subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, universal_newlines=True,creationflags=CREATE_NO_WINDOW)
     return output_path
