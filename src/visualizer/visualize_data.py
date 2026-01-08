@@ -5,13 +5,15 @@ import json
 import shutil
 import cv2
 import subprocess
+import sys
 import pandas as pd
 import numpy as np
 import time 
 from tqdm import tqdm
 from pathlib import Path
 from src.utils.manipulate_video import get_video_properties
-from src.utils.utils import get_bin_path
+from src.utils.utils import get_bin_path, CREATE_NO_WINDOW
+
 
 def get_color(track_id):
     """Generates a consistent BGR color for a given track_id."""
@@ -19,6 +21,8 @@ def get_color(track_id):
     return tuple(np.random.randint(0, 255, 3).tolist())
 
 def run_processing(segments, video_path, output_path, lookup, mode, fps, width, height, log_callback=None, progress_callback=None):
+    if(len(segments)==0):
+        return
     ffmpeg_bin = get_bin_path("ffmpeg")
     
     # Calculate total frames/duration for progress tracking
@@ -50,7 +54,7 @@ def run_processing(segments, video_path, output_path, lookup, mode, fps, width, 
         last_percent = -1
 
         # Launch FFmpeg
-        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, universal_newlines=True)
+        process = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, universal_newlines=True,creationflags=CREATE_NO_WINDOW)
 
         try:
             for line in process.stdout:
@@ -116,7 +120,7 @@ def run_processing(segments, video_path, output_path, lookup, mode, fps, width, 
     ]
     
     cap = cv2.VideoCapture(video_path)
-    process = subprocess.Popen(ffmpeg_cmd, stdin=subprocess.PIPE)
+    process = subprocess.run(ffmpeg_cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, universal_newlines=True,creationflags=CREATE_NO_WINDOW)
 
     try:
         for f0, f1 in segments:

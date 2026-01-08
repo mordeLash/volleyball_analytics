@@ -2,6 +2,10 @@
 
 import sys
 import os
+import subprocess
+
+CREATE_NO_WINDOW = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+
 
 def get_resource_path(relative_path):
     """
