@@ -35,13 +35,9 @@ if __name__ == "__main__":
     # Initialize the main app
     app = VolleyballAnalyticsGUI()
     
-    # Hide the main app window until splash is done
-    app.withdraw()
-    
     # Set a timer to close splash and show main app
     def transition():
         splash_window.destroy()
-        app.deiconify() # Re-show main window
 
     # Adjust the delay (ms) based on your needs
     splash_window.after(1000, transition)

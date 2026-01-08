@@ -14,7 +14,6 @@ from pathlib import Path
 from src.utils.manipulate_video import get_video_properties
 from src.utils.utils import get_bin_path, CREATE_NO_WINDOW
 
-
 def get_color(track_id):
     """Generates a consistent BGR color for a given track_id."""
     np.random.seed(int(track_id))
@@ -54,7 +53,7 @@ def run_processing(segments, video_path, output_path, lookup, mode, fps, width, 
         last_percent = -1
 
         # Launch FFmpeg
-        process = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, universal_newlines=True,creationflags=CREATE_NO_WINDOW)
+        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, universal_newlines=True,creationflags=CREATE_NO_WINDOW)
 
         try:
             for line in process.stdout:
@@ -120,7 +119,7 @@ def run_processing(segments, video_path, output_path, lookup, mode, fps, width, 
     ]
     
     cap = cv2.VideoCapture(video_path)
-    process = subprocess.run(ffmpeg_cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, universal_newlines=True,creationflags=CREATE_NO_WINDOW)
+    process = subprocess.Popen(ffmpeg_cmd, stdin=subprocess.PIPE, creationflags=CREATE_NO_WINDOW)
 
     try:
         for f0, f1 in segments:
