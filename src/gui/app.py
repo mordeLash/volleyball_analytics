@@ -59,7 +59,7 @@ class VolleyballAnalyticsGUI(ctk.CTk):
         self.adv_toggle_btn = ctk.CTkButton(self, text="▶ Advanced Options", fg_color="transparent", 
                                             text_color=("gray10", "gray90"), anchor="w", 
                                             command=self.toggle_advanced)
-        self.adv_toggle_btn.pack(pady=(10, 0), padx=20, fill="x")
+        self.adv_toggle_btn.pack(pady=(5, 0), padx=20, fill="x")
 
         # Pass EVERYTHING to the advanced frame now
         adv_vars = {
@@ -77,7 +77,7 @@ class VolleyballAnalyticsGUI(ctk.CTk):
         self.adv_frame = AdvancedOptionsFrame(self, adv_vars)
 
         # Logging Box
-        self.log_text = ctk.CTkTextbox(self, height=250)
+        self.log_text = ctk.CTkTextbox(self, height=100)
         self.log_text.pack(pady=20, padx=20, fill="both", expand=True)
         self.log_text.configure(state="disabled")
 
@@ -92,7 +92,7 @@ class VolleyballAnalyticsGUI(ctk.CTk):
             self.adv_frame.pack_forget()
             self.adv_toggle_btn.configure(text="▶ Advanced Options")
         else:
-            self.adv_frame.pack(pady=5, padx=20, fill="x", after=self.adv_toggle_btn)
+            self.adv_frame.pack(pady=5, padx=20, fill="x", before=self.log_text)
             self.adv_toggle_btn.configure(text="▼ Advanced Options")
         self.show_advanced = not self.show_advanced
 

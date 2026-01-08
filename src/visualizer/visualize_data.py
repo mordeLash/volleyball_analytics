@@ -76,10 +76,12 @@ def run_processing(segments, video_path, output_path, lookup, mode, fps, width, 
                         continue
             
             process.wait()
+            
         finally:
             pbar.close()
             if process.returncode != 0:
                 raise subprocess.CalledProcessError(process.returncode, cmd)
+        progress_callback(100, 100, "Cutting Complete")
         return
 
     # --- PATH B: VISUALIZATION (OpenCV + FFmpeg Pipe) ---
@@ -169,13 +171,13 @@ def run_processing(segments, video_path, output_path, lookup, mode, fps, width, 
                 
                 if not progress_callback:
                     pbar.update(1)
-
     finally:
         cap.release()
         process.stdin.close()
         process.wait()
         if not progress_callback:
             pbar.close()
+        progress_callback(100, 100, "Visualization Complete")
 
 def visualize(video_path, output_path, tracking_csv, predictions_csv=None, overlay_mode="both", buffer_sec=1.5, log_callback=None, progress_callback=None):
     fps, total_frames, width, height = get_video_properties(video_path)
