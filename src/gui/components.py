@@ -34,7 +34,7 @@ class AdvancedOptionsFrame(ctk.CTkFrame):
         super().__init__(master, **kwargs)
         self.grid_columnconfigure((1, 3), weight=1)
 
-# Configure columns so they expand evenly
+        # Configure columns so they expand evenly
         self.grid_columnconfigure((1, 3), weight=1)
 
         # --- Section 1: Pipeline Flow ---

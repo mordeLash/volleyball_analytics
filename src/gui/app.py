@@ -79,7 +79,7 @@ class VolleyballAnalyticsGUI(ctk.CTk):
         self.adv_frame = AdvancedOptionsFrame(self, adv_vars)
 
         # Logging Box
-        self.log_text = ctk.CTkTextbox(self, height=100)
+        self.log_text = ctk.CTkTextbox(self, height=0)
         self.log_text.pack(pady=20, padx=20, fill="both", expand=True)
         self.log_text.configure(state="disabled")
 
