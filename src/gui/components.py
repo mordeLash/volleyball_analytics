@@ -58,10 +58,10 @@ class AdvancedOptionsFrame(ctk.CTkFrame):
         self.create_header("Hardware & Model", 3)
 
         ctk.CTkLabel(self, text="RF Model:").grid(row=4, column=0, padx=(20, 10), pady=5, sticky="w")
-        ctk.CTkComboBox(self, values=["v1", "v2", "v3", "v4"], variable=variables['rf_model_ver']).grid(row=4, column=1, padx=10, pady=5, sticky="ew")
+        ctk.CTkComboBox(self, values=["v3", "v4"], variable=variables['rf_model_ver']).grid(row=4, column=1, padx=10, pady=5, sticky="ew")
         
         ctk.CTkLabel(self, text="Device:").grid(row=4, column=2, padx=(20, 10), pady=5, sticky="w")
-        ctk.CTkComboBox(self, values=["cpu", "cuda", "intel:gpu"], variable=variables['device']).grid(row=4, column=3, padx=10, pady=5, sticky="ew")
+        ctk.CTkComboBox(self, values=["cpu", "intel:gpu"], variable=variables['device']).grid(row=4, column=3, padx=10, pady=5, sticky="ew")
 
         # --- Section 4: Trimming ---
         self.create_header("Video Trimming", 5)
