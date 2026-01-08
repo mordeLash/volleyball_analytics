@@ -19,10 +19,12 @@ def get_color(track_id):
 def run_processing(segments, video_path, output_path, lookup, mode, fps, width, height, log_callback=None, progress_callback=None):
     ffmpeg_bin = get_bin_path("ffmpeg")
     
-    # --- PATH A: PURE FFMPEG (Fast Cut) ---
+    # Calculate total frames/duration for progress tracking
+    total_frames_to_proc = sum(f1 - f0 + 1 for f0, f1 in segments)
+    total_duration_secs = total_frames_to_proc / fps
+
+    # --- PATH A: PURE FFMPEG (With Progress Bar) ---
     if mode == "cut":
-        if progress_callback: progress_callback(0, 100, "Cutting Video...")
-        
         filter_script = ""
         for i, (f0, f1) in enumerate(segments):
             t0, dur = f0 / fps, (f1 - f0 + 1) / fps
@@ -32,21 +34,54 @@ def run_processing(segments, video_path, output_path, lookup, mode, fps, width, 
         concat_inputs = "".join([f"[v{i}][a{i}]" for i in range(len(segments))])
         filter_script += f"{concat_inputs}concat=n={len(segments)}:v=1:a=1[outv][outa]"
         
+        # Add '-progress pipe:1' to output progress info to stdout
         cmd = [
-            ffmpeg_bin, "-y", "-i", video_path,
+            ffmpeg_bin, "-y", "-progress", "pipe:1", "-i", video_path,
             "-filter_complex", filter_script,
             "-map", "[outv]", "-map", "[outa]",
             "-c:v", "libx264", "-preset", "fast", "-crf", "23",
             "-c:a", "aac", "-b:a", "192k", output_path
         ]
-        subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        
-        if progress_callback: progress_callback(100, 100, "Cutting Complete")
+
+        # Setup Progress Bars
+        pbar = tqdm(total=100, desc="Cutting Video", disable=(progress_callback is not None))
+        last_percent = -1
+
+        # Launch FFmpeg
+        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, universal_newlines=True)
+
+        try:
+            for line in process.stdout:
+                # FFmpeg outputs out_time_us (microseconds)
+                if "out_time_us=" in line:
+                    try:
+                        time_us = int(line.split('=')[1])
+                        current_secs = time_us / 1_000_000.0
+                        
+                        # Calculate percentage
+                        percent = int((current_secs / total_duration_secs) * 100)
+                        percent = min(100, max(0, percent)) # Clamp 0-100
+
+                        if percent > last_percent:
+                            if progress_callback:
+                                # Update GUI
+                                progress_callback(percent, 100, f"Cutting Video")
+                            else:
+                                # Update CLI TQDM
+                                pbar.update(percent - last_percent)
+                            last_percent = percent
+                    except (ValueError, IndexError):
+                        continue
+            
+            process.wait()
+        finally:
+            pbar.close()
+            if process.returncode != 0:
+                raise subprocess.CalledProcessError(process.returncode, cmd)
         return
 
     # --- PATH B: VISUALIZATION (OpenCV + FFmpeg Pipe) ---
     # Progress Setup
-    total_frames_to_proc = sum(f1 - f0 + 1 for f0, f1 in segments)
     frames_done = 0
     last_percent = -1
     start_time = time.time()
