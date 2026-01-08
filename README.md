@@ -2,14 +2,9 @@
 
 # 🏐 Automated Volleyball Match Playtime Extractor
 
-An end-to-end computer vision pipeline designed to automate volleyball match playtime extraction. By tracking ball physics and movement patterns, to distinguish between active play and downtime.
+<img src="./assets/track_clip1.gif" alt="cut clip1" width="400"/> <img src="./assets/track_clip3.gif" alt="track clip2" width="400"/>
 
-<p align="center">
-<img src="./assets/track_clip1.gif" alt="Tracking Example 1" width="400"/>
-<img src="./assets/track_clip3.gif" alt="Tracking Example 2" width="400"/>
-</p>
-
-## Key Features
+## 🚀 Key Features
 
 * **Automated Play Extraction:** Automatically trims raw match footage into "Rally-only" clips with smart buffers.
 * **Physics-Based Tracking:** Uses velocity and direction, to assign tracks to detections  and than uses avg ball behavior(movement and velocity thresholds) to filter out background noise and sideline balls.
