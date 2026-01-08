@@ -41,52 +41,68 @@ def get_video_properties(video_path):
 
 
 def ensure_30fps(input_path, output_path, log_func):
-    """Checks FPS and converts to 30 if higher. Requires re-encoding."""
+    """
+    Checks FPS and converts to exactly 30 if higher.
+    """
     cap = cv2.VideoCapture(input_path)
     fps = cap.get(cv2.CAP_PROP_FPS)
     cap.release()
-    ffmpeg_bin = get_bin_path("ffmpeg")
+
+    # We allow a small margin around 30.0
     if fps > 30.5:
-        log_func(f"Video FPS is {fps:.2f}. Downsampling to 30 FPS (Re-encoding)...")
+        log_func(f"Video FPS is {fps:.2f}. Downsampling to 30 FPS...")
+        
+        ffmpeg_bin = get_bin_path("ffmpeg")
+        
+        # Mirroring your successful manual command
         cmd = [
             ffmpeg_bin, "-y",
             "-i", input_path,
-            "-filter:v", "fps=fps=30,setpts=N/FRAME_RATE/TB",  # Reset timestamps!
-            "-c:a", "copy",
-            "-crf", "23",
+            "-vf", "fps=fps=30",     # Fixed frame rate filter
+            "-c:v", "libx264",       # Re-encode video
+            "-crf", "20",            # Your preferred quality setting
+            "-c:a", "copy",          # Keep original audio stream
             output_path
         ]
-        subprocess.run(cmd, check=True, capture_output=True)
-        return output_path
+        
+        try:
+            subprocess.run(cmd, check=True, capture_output=True, text=True)
+            return output_path
+        except subprocess.CalledProcessError as e:
+            log_func(f"Error during FPS conversion: {e.stderr}")
+            raise e
     
     elif fps < 29.5:
         log_func(f"WARNING: Video FPS is low ({fps:.2f}). Tracking accuracy may decrease.")
     
+    # If already ~30fps, just return the original path to skip processing
     return input_path
 
 def trim_video(input_path, output_path, start_time, end_time, log_func):
-    """Cuts a section of the video using FFmpeg with frame accuracy."""
-    if not start_time and not end_time:
+    """
+    Blazing fast cut using stream copying.
+    """
+    if end_time == "00:00:00" or end_time == "" and start_time == "":
         return input_path
     
-    log_func(f"Trimming video: {start_time or '00:00:00'} to {end_time or 'End'}")
-    ffmpeg_bin = get_bin_path("ffmpeg")
-    cmd = [ffmpeg_bin, '-y']
+    log_func(f"Fast-Trimming: {start_time or '00:00:00'} to {end_time or 'End'}")
     
-    # Put -ss AFTER -i for frame-accurate seeking (slower but precise)
-    cmd.extend(['-i', input_path])
+    ffmpeg_bin = get_bin_path("ffmpeg")
+    
+    # We put -ss BEFORE -i for the 'Fast Seek' behavior you used
+    cmd = [ffmpeg_bin, '-y']
     
     if start_time:
         cmd.extend(['-ss', start_time])
+        
     if end_time:
         cmd.extend(['-to', end_time])
-    
-    # Re-encode for frame accuracy
+        
     cmd.extend([
-        '-c:v', 'libx264', '-crf', '23', '-preset', 'fast',
-        '-c:a', 'aac', '-b:a', '192k',
+        '-i', input_path,
+        '-c', 'copy',                # No re-encoding
         output_path
     ])
     
-    subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    subprocess.run(cmd, capture_output=True, check=True)
     return output_path

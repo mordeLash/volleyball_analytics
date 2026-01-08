@@ -34,39 +34,62 @@ class AdvancedOptionsFrame(ctk.CTkFrame):
         super().__init__(master, **kwargs)
         self.grid_columnconfigure((1, 3), weight=1)
 
-        # --- Row 0: RF Model & Device ---
-        ctk.CTkLabel(self, text="RF Model:").grid(row=0, column=0, padx=10, pady=10, sticky="w")
-        ctk.CTkComboBox(self, values=["v1", "v2", "v3", "v4"], variable=variables['rf_model_ver']).grid(row=0, column=1, padx=10, pady=10, sticky="ew")
-        
-        ctk.CTkLabel(self, text="Device:").grid(row=0, column=2, padx=10, pady=10, sticky="w")
-        ctk.CTkComboBox(self, values=["cpu", "cuda", "intel:gpu"], variable=variables['device']).grid(row=0, column=3, padx=10, pady=10, sticky="ew")
+# Configure columns so they expand evenly
+        self.grid_columnconfigure((1, 3), weight=1)
 
-        # --- Row 1: Start At & Stop At ---
+        # --- Section 1: Pipeline Flow ---
+        self.create_header("Pipeline Control", 0)
+
         stages = ["detection", "tracking", "cleaning", "features", "prediction", "visualization"]
-        ctk.CTkLabel(self, text="Start At:").grid(row=1, column=0, padx=10, pady=10, sticky="w")
-        ctk.CTkComboBox(self, values=stages, variable=variables['start_at']).grid(row=1, column=1, padx=10, pady=10, sticky="ew")
         
-        ctk.CTkLabel(self, text="Stop At:").grid(row=1, column=2, padx=10, pady=10, sticky="w")
-        ctk.CTkComboBox(self, values=stages, variable=variables['stop_at']).grid(row=1, column=3, padx=10, pady=10, sticky="ew")
+        ctk.CTkLabel(self, text="Start At:").grid(row=1, column=0, padx=(20, 10), pady=5, sticky="w")
+        ctk.CTkComboBox(self, values=stages, variable=variables['start_at']).grid(row=1, column=1, padx=10, pady=5, sticky="ew")
+        
+        ctk.CTkLabel(self, text="Stop At:").grid(row=1, column=2, padx=(20, 10), pady=5, sticky="w")
+        ctk.CTkComboBox(self, values=stages, variable=variables['stop_at']).grid(row=1, column=3, padx=10, pady=5, sticky="ew")
 
-        # --- Row 2: Intermediate CSV Input (Optional) ---
-        # This button triggers a file dialog for the specific starting CSV
-        ctk.CTkLabel(self, text="Custom Input CSV:").grid(row=2, column=0, padx=10, pady=10, sticky="w")
-        self.csv_entry = ctk.CTkEntry(self, textvariable=variables['input_csv_path'], placeholder_text="Required if skipping detection")
-        self.csv_entry.grid(row=2, column=1, columnspan=2, padx=10, pady=10, sticky="ew")
-        ctk.CTkButton(self, text="Browse CSV", width=80, command=self.browse_csv).grid(row=2, column=3, padx=10)
+        # --- Section 2: Input Overrides ---
+        ctk.CTkLabel(self, text="Custom CSV:").grid(row=2, column=0, padx=(20, 10), pady=5, sticky="w")
+        self.csv_entry = ctk.CTkEntry(self, textvariable=variables['input_csv_path'], placeholder_text="Path to .csv if skipping stages...")
+        self.csv_entry.grid(row=2, column=1, columnspan=2, padx=10, pady=5, sticky="ew")
+        ctk.CTkButton(self, text="Browse", width=80, command=self.browse_csv).grid(row=2, column=3, padx=(0, 20), pady=5, sticky="w")
 
-        # --- Row 3: Trim Settings ---
-        ctk.CTkLabel(self, text="Trim Start:").grid(row=3, column=0, padx=10, pady=10, sticky="w")
-        ctk.CTkEntry(self, textvariable=variables['start_time'], placeholder_text="00:00:10").grid(row=3, column=1, padx=10, pady=10, sticky="ew")
-        ctk.CTkLabel(self, text="Trim End:").grid(row=3, column=2, padx=10, pady=10, sticky="w")
-        ctk.CTkEntry(self, textvariable=variables['end_time'], placeholder_text="00:00:45").grid(row=3, column=3, padx=10, pady=10, sticky="ew")
+        # --- Section 3: Model & Hardware ---
+        self.create_header("Hardware & Model", 3)
 
-        # --- Row 4: Keep Files & Viz ---
+        ctk.CTkLabel(self, text="RF Model:").grid(row=4, column=0, padx=(20, 10), pady=5, sticky="w")
+        ctk.CTkComboBox(self, values=["v1", "v2", "v3", "v4"], variable=variables['rf_model_ver']).grid(row=4, column=1, padx=10, pady=5, sticky="ew")
+        
+        ctk.CTkLabel(self, text="Device:").grid(row=4, column=2, padx=(20, 10), pady=5, sticky="w")
+        ctk.CTkComboBox(self, values=["cpu", "cuda", "intel:gpu"], variable=variables['device']).grid(row=4, column=3, padx=10, pady=5, sticky="ew")
+
+        # --- Section 4: Trimming ---
+        self.create_header("Video Trimming", 5)
+
+        ctk.CTkLabel(self, text="Start:").grid(row=6, column=0, padx=(20, 10), pady=5, sticky="w")
+        ctk.CTkEntry(self, textvariable=variables['start_time'], placeholder_text="00:00:00").grid(row=6, column=1, padx=10, pady=5, sticky="ew")
+        
+        ctk.CTkLabel(self, text="End:").grid(row=6, column=2, padx=(20, 10), pady=5, sticky="w")
+        ctk.CTkEntry(self, textvariable=variables['end_time'], placeholder_text="Leave empty for end").grid(row=6, column=3, padx=10, pady=5, sticky="ew")
+
+        # --- Section 5: Visualization & Output ---
+        self.create_header("Output Options", 7)
+
         viz_types = ["all", "cut", "both", "data", "trajectory"]
-        ctk.CTkCheckBox(self, text="Keep Intermediate Files", variable=variables['keep_all']).grid(row=4, column=0, columnspan=3, padx=10, pady=10, sticky="w")
-        ctk.CTkCheckBox(self, text="Visualize Early (on Stop)", variable=variables['viz_early']).grid(row=4, column=2, columnspan=3, padx=10, pady=10, sticky="w")
-        ctk.CTkComboBox(self, values=viz_types, variable=variables['viz_type']).grid(row=4, column=1, padx=10, pady=10, sticky="ew")
+        ctk.CTkLabel(self, text="Viz Style:").grid(row=8, column=0, padx=(20, 10), pady=5, sticky="w")
+        ctk.CTkComboBox(self, values=viz_types, variable=variables['viz_type']).grid(row=8, column=1, padx=10, pady=5, sticky="ew")
+
+        # Group Checkboxes in a Frame for better alignment
+        check_frame = ctk.CTkFrame(self, fg_color="transparent")
+        check_frame.grid(row=9, column=0, columnspan=4, pady=(10, 0), sticky="ew")
+        
+        ctk.CTkCheckBox(check_frame, text="Keep CSVs", variable=variables['keep_all']).pack(side="left", padx=20)
+        ctk.CTkCheckBox(check_frame, text="Visualize on Early Stop", variable=variables['viz_early']).pack(side="left", padx=20)
+
+    def create_header(self, text, row):
+        """Helper to create section dividers"""
+        lbl = ctk.CTkLabel(self, text=text, font=ctk.CTkFont(size=13, weight="bold"), text_color="#1f538d")
+        lbl.grid(row=row, column=0, columnspan=4, padx=10, pady=(15, 5), sticky="w")
 
     def browse_csv(self):
         path = filedialog.askopenfilename(filetypes=[("CSV files", "*.csv")])
