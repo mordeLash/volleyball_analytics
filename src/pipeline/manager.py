@@ -4,15 +4,10 @@ import os
 import shutil
 import yaml
 import pandas as pd
-from src.utils.utils import get_resource_path 
-from src.utils.manipulate_video import ensure_30fps, trim_video
-from src.ball_detector.get_ball_detections import get_ball_detections
-from src.ball_detector.track_ball_detections import track_with_physics_predictive
-from src.ball_detector.clean_tracking_data import clean_noise
-from src.rally_predictor.extract_features import extract_features
-from src.rally_predictor.rf_predictor import predict_rallies
-from src.rally_predictor.predictions_handler import analyze_rally_stats, smooth_predictions
-from src.visualizer.visualize_data import visualize
+from src.utils import get_resource_path, ensure_30fps, trim_video 
+from src.ball_detector import get_ball_detections, track_with_physics_predictive, clean_noise
+from src.rally_predictor import extract_features,predict_rallies,analyze_rally_stats,smooth_predictions
+from src.visualizer import visualize
 
 def run_volleyball_pipeline(config, log_callback, progress_callback=None):
     """

@@ -1,4 +1,4 @@
-from src.gui.app import VolleyballAnalyticsGUI
+from src.gui import VolleyballAnalyticsGUI
 
 if __name__ == "__main__":
     app = VolleyballAnalyticsGUI()
