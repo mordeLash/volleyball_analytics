@@ -4,6 +4,7 @@
 
 <img src="./assets/track_clip1.gif" alt="cut clip1" width="400"/> <img src="./assets/track_clip3.gif" alt="track clip2" width="400"/>
 
+---
 ## 🚀 Key Features
 
 * **Automated Play Extraction:** Automatically trims raw match footage into "Rally-only" clips with smart buffers.
