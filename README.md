@@ -1,79 +1,44 @@
-# Automated Volleyball Match Analysis 
-
-This project provides an automated computer vision pipeline for analyzing volleyball match footage. It tracks ball movement to distinguish between active rallies and downtime, facilitating automated play-time extraction and cool visualization.
-
-<img src="./assets/track_clip1.gif" alt="cut clip1" width="400"/> <img src="./assets/track_clip3.gif" alt="track clip2" width="400"/>
-
-
-## 📑 Pipeline Stages
-
-### Stage 1: Detect Volleyball in Video
-
-* **Train YOLOv11 Detection Model:** The model was trained using an iterative active learning pipeline involving **SAM3** (Segment Anything Model) to generate ground-truth data from "hard frames."
-* **Build Framework for Video Inference:** The framework runs detection on every frame, saving bounding box coordinates to a CSV.
-* **Optimization:** The model was converted to **OpenVINO** to speed up inference on local PCs.
-
-### Stage 2: Convert Detections into Tracks
-
-* **Track Assignment:** Each detection is assigned a unique Track ID.
-* **Physics-based Prediction:** Future frame assignments are based on physics-based location predictions.
-* **Static Object Filtering:** An `is_static` flag prevents moving tracks from incorrectly merging with background objects like sideline balls.
-
-### Stage 3: Clean Tracks
-
-* **Noise Removal:** Low-movement objects and "flickering" detections caused by limbs are filtered out.
-* **Continuity:** Prioritizes track continuity over raw confidence scores to maintain detection during high-velocity or blurry frames.
-
-### Stage 4: Feature Extraction
-
-* **Interpolation:** Small gaps in tracks are interpolated for continuity.
-* **Movement Metrics:** Calculates **velocity**, **acceleration**, and **y-axis dominance** within a sliding window.
-
-### Stage 5: Predict Rally or Downtime
-
-This stage utilizes a machine learning classifier to categorize match states.
-
-* **Train a Random Forest Model:** A `RandomForestClassifier` from Scikit-learn was trained on labeled data from three different matches.
-* **Evaluation:** The model is assessed based on its F1 score and the relative importance of specific features.
-
-<table border="0">
-  <tr>
-    <td align="center"><b>Predictor F1 Score</b></td>
-    <td align="center"><b>Feature Importance</b></td>
-  </tr>
-  <tr>
-    <td>
-      <img src="./assets/rally_predictor_v4_f1_score.png" alt="Predictor F1 Score" width="450" height="450"/>
-    </td>
-    <td>
-      <img src="./assets/rally_predictor_v4_feature_importance.png" alt="Feature Importance" width="450" height="450"/>
-    </td>
-  </tr>
-</table>
-
 ---
 
-### Stage 6: Clean Predictions
+# 🏐 Automated Volleyball Match Playtime Extractor
 
-* **Temporal Smoothing:** A rolling window is applied to the Random Forest output to remove jitter.
-* **Analytics Extraction:** Extracts final stats such as the total number of rallies and average rally duration.
+An end-to-end computer vision pipeline designed to automate volleyball match playtime extraction. By tracking ball physics and movement patterns, to distinguish between active play and downtime.
 
-### Stage 7: Visualization
+<p align="center">
+<img src="./assets/track_clip1.gif" alt="Tracking Example 1" width="400"/>
+<img src="./assets/track_clip3.gif" alt="Tracking Example 2" width="400"/>
+</p>
 
-* **Option 1 (Play Time):** Automatically trims the video based on predictions with a 1-second buffer.
-* **Option 2 (Data Overlay):** Visualizes bounding boxes, ball "trails," and real-time velocity (pixels per frame).
+## 🚀 Key Features
+
+* **Automated Play Extraction:** Automatically trims raw match footage into "Rally-only" clips with smart buffers.
+* **Physics-Based Tracking:** Uses velocity and direction, to assign tracks to detections  and than uses avg ball behavior(movement and velocity thresholds) to filter out background noise and sideline balls.
+* **Active Learning Pipeline:** Detection models trained via an iterative process using **SAM3** (Segment Anything Model) to master "hard frames".
+* **Hardware Optimized:** Supports **OpenVINO** for high-speed inference on local CPUs.
+* **Dual Interface:** Run via a powerful CLI or a user-friendly GUI, an installer for windows also exist.
 
 ---
-
 
 ## 🛠️ Installation & Setup
 
-This project uses [uv](https://docs.astral.sh/uv/) for fast, reliable Python package and project management.
+### For Windows Application (Recommended for Users)
+
+This version is a standalone portable application. It includes all necessary dependencies, including **FFmpeg** and **OpenVINO**, so no separate Python or library installation is required.
+
+1. **Download:** Navigate to the [Releases](https://github.com/mordeLash/volleyball_analytics/releases) page and download the latest `VPE.installer.exe.
+2. **Install:** Run the installer and follow the instructions(windows may flag it for being unsafe, because I am not a certified publisher, manually click run anyway).
+3. **Run:** After the installation is done, you will have an app called volleyball playtime installer you can run on your pc.
+4. **Use:** after selecting a game file and a destination folder, click the run pipeline button(if you don't see it try to expand the window).
+5. **Wait** The proccess should take somewhere between 1-3 the time of your video, depending on your pc and if you are using it or not. 
+
+### For Python Installation (For Developers)
+
+This project uses [uv](https://docs.astral.sh/uv/) for high-performance dependency management.
 
 ### Prerequisites
 
 * **Python 3.12+**
-* **uv** 
+* **uv** installed (`curl -LsSf https://astral.sh/uv/install.sh | sh`)
 
 ### Getting Started
 
@@ -92,57 +57,82 @@ uv sync
 ```
 
 
+
 ---
 
 ## 💻 Usage
 
-The pipeline is managed through `main.py` and can be executed as a full process or started from intermediate stages.
+### Option 1: Graphical User Interface (GUI)
 
-### Running the Full Pipeline
+Perfect for users who want to visualize the process without using the terminal.
 
-To process a video from scratch (Detection → Tracking → Cleaning → Features → Prediction → Visualization):
+```bash
+uv run gui.py
+
+```
+
+### Option 2: Command Line Interface (CLI)
+
+The pipeline is managed through `main.py` and supports entry points at any stage.
+
+**Run Full Pipeline:**
 
 ```bash
 uv run main.py --video_path "path/to/match.mp4"
 
 ```
 
-### Advanced Usage & Entry Points
+**Advanced Entry Points:**
 
-You can skip computationally expensive stages (like detection) by providing intermediate CSV files:
-
-* **Start from Tracking:**
+* **Resume from Tracking:** Skip detection by providing a detections CSV.
 ```bash
 uv run main.py --input_detections "output/table_data/game1_detections.csv"
 
 ```
 
 
-* **Start from Feature Extraction:**
+* **Model Selection:** Choose between Random Forest versions (e.g., `v3` or `v4`).
 ```bash
-uv run main.py --input_clean "output/table_data/game1_cleaned.csv"
+uv run main.py --video_path "match.mp4" --rf_model "v4"
 
 ```
 
 
-* **Stop Early (e.g., just for cleaning):**
-```bash
-uv run main.py --video_path "match.mp4" --stop_at cleaning
-
-```
-
-### Configuration Options
-
-* `--rf_model`: Choose which Random Forest version to use (default: `v3`).
-* `--device`: Specify `cpu` or `cuda` or `inte:gpu` for YOLOv11 inference (default: `cpu`).
-* `--visualize_early`: Generate a video overlay immediately after the current stage.
 
 ---
 
+## 🔬 How it Works
 
-## 🗺️ Roadmap & Future Improvements
+The project is divided into 7 distinct stages to ensure data integrity:
 
-* **Handling Variations:** Support for non-30 FPS video models.
-* **Calibration:** Add a calibration phase based on ball detections.
-* **Feature Refinement:** Implement dual-window extraction (short and long) to better detect serves and high tosses during downtime.
-* **Expanded Data:** Add training frames with more diverse ball colors and different camera angles (mid-court, heavy left side).
+1. **Detection (YOLOv11):** Frames are processed to find the ball. We use an OpenVINO-optimized YOLOv11 model.
+2. **Tracking:** Detections are linked across frames using physics predictions. Static objects (like balls sitting near the net) are filtered out via an `is_static` flag.
+3. **Cleaning:** Movement thresholds and "flicker" filters remove false positives caused by player limbs.
+4. **Feature Extraction:** Calculates rolling metrics for velocity, acceleration, vertical movement and more.
+5. **Classification:** A **Random Forest Classifier** (trained on multi-match data) categorizes frames into "Rally" or "Downtime".
+6. **Smoothing:** A temporal rolling window removes jitter, ensuring rallies don't "flicker" off during short ball detection losses.
+7. **Visualization:** Generates the final video with data overlays (ball trails and real-time velocity) or just get the playtime of the match.
+
+### Model Performance
+
+The Random Forest model is evaluated using group-based splitting to prevent data leakage between matches.
+
+| Predictor F1 Score | Feature Importance |
+| --- | --- |
+| <img src="./assets/rally_predictor_v4_f1_score.png" width="350"/> | <img src="./assets/rally_predictor_v4_feature_importance.png" width="350"/> |
+
+---
+
+## 🗺️ Roadmap
+
+* **Multi-FPS Support:** Adapt physics calculations for non-30 FPS footage.
+* **Auto-Calibration:** Use ball detections to automatically calibrate court dimensions/pixels-to-meters.
+* **Service Detection:** Implementation of a dual-window feature extraction to better identify serves and high tosses.
+* **Diversified Dataset:** Adding training data from diverse camera angles (mid-court, end-line) and varied ball colors.
+* **Continue Analytics Pipeline:** The Ultimate goal of this project is to extract real metrics for the ball movement like height and speed. 
+
+---
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](https://www.google.com/search?q=LICENSE) file for details.
