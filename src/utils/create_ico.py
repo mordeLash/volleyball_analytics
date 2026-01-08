@@ -1,3 +1,5 @@
+# src/utils/create_ico.py
+
 from PIL import Image
 
 def create_ico(input_path, output_path):

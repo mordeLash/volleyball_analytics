@@ -1,3 +1,5 @@
+# src/ball_detector/get_ball_detections.py
+
 import cv2
 import csv
 import time
