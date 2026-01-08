@@ -9,7 +9,7 @@ An end-to-end computer vision pipeline designed to automate volleyball match pla
 <img src="./assets/track_clip3.gif" alt="Tracking Example 2" width="400"/>
 </p>
 
-## 🚀 Key Features
+## Key Features
 
 * **Automated Play Extraction:** Automatically trims raw match footage into "Rally-only" clips with smart buffers.
 * **Physics-Based Tracking:** Uses velocity and direction, to assign tracks to detections  and than uses avg ball behavior(movement and velocity thresholds) to filter out background noise and sideline balls.
