@@ -5,6 +5,7 @@ import cv2
 import subprocess
 import pandas as pd
 import numpy as np
+import time 
 from tqdm import tqdm
 from pathlib import Path
 from src.utils.manipulate_video import get_video_properties
@@ -12,15 +13,16 @@ from src.utils.utils import get_bin_path
 
 def get_color(track_id):
     """Generates a consistent BGR color for a given track_id."""
-    # A simple seed based on ID to keep colors consistent
     np.random.seed(int(track_id))
     return tuple(np.random.randint(0, 255, 3).tolist())
 
-def run_processing(segments, video_path, output_path, lookup, mode, fps, width, height):
+def run_processing(segments, video_path, output_path, lookup, mode, fps, width, height, log_callback=None, progress_callback=None):
     ffmpeg_bin = get_bin_path("ffmpeg")
     
-    # --- PATH A: PURE FFMPEG (Unchanged) ---
+    # --- PATH A: PURE FFMPEG (Fast Cut) ---
     if mode == "cut":
+        if progress_callback: progress_callback(0, 100, "Cutting Video...")
+        
         filter_script = ""
         for i, (f0, f1) in enumerate(segments):
             t0, dur = f0 / fps, (f1 - f0 + 1) / fps
@@ -38,9 +40,20 @@ def run_processing(segments, video_path, output_path, lookup, mode, fps, width, 
             "-c:a", "aac", "-b:a", "192k", output_path
         ]
         subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        
+        if progress_callback: progress_callback(100, 100, "Cutting Complete")
         return
 
     # --- PATH B: VISUALIZATION (OpenCV + FFmpeg Pipe) ---
+    # Progress Setup
+    total_frames_to_proc = sum(f1 - f0 + 1 for f0, f1 in segments)
+    frames_done = 0
+    last_percent = -1
+    start_time = time.time()
+    
+    # Terminal progress bar (disabled if GUI callback is present)
+    pbar = tqdm(total=total_frames_to_proc, desc=f"Visualizing: {mode}", disable=(progress_callback is not None))
+
     filter_parts = []
     for i, (f0, f1) in enumerate(segments):
         t0 = f0 / fps
@@ -67,20 +80,17 @@ def run_processing(segments, video_path, output_path, lookup, mode, fps, width, 
     process = subprocess.Popen(ffmpeg_cmd, stdin=subprocess.PIPE)
 
     try:
-        for f0, f1 in tqdm(segments, desc=f"Visualizing: {mode}"):
+        for f0, f1 in segments:
             if int(cap.get(cv2.CAP_PROP_POS_FRAMES)) != f0:
                 cap.set(cv2.CAP_PROP_POS_FRAMES, f0)
             
-            # trails maps track_id -> list of (cx, cy)
             trails = {} 
 
             for current_frame_idx in range(f0, f1 + 1):
                 ret, frame = cap.read()
                 if not ret: break
 
-                # lookup.get now returns a LIST of detections
                 detections = lookup.get(current_frame_idx, [])
-                
                 active_ids_this_frame = set()
 
                 for d in detections:
@@ -88,40 +98,49 @@ def run_processing(segments, video_path, output_path, lookup, mode, fps, width, 
                     active_ids_this_frame.add(track_id)
                     color = get_color(track_id)
 
-                    # 1. Draw Bounding Box and ID/Conf
                     if mode in ("data", "both"):
                         x1, y1, x2, y2 = map(int, (d["x1"], d["y1"], d["x2"], d["y2"]))
                         cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
                         label = f"ID:{track_id} Co:{d.get('conf', 0):.1f}"
                         cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
 
-                    # 2. Update Trajectory Data
                     if track_id not in trails:
                         trails[track_id] = []
                     trails[track_id].append((int(d["cx"]), int(d["cy"])))
 
-                # 3. Handle trajectory drawing and "None" for missing detections to keep trails clean
                 if mode in ("trajectory", "both"):
                     for tid, pts_list in trails.items():
-                        # If ID wasn't seen this frame, add None to maintain timing/length
                         if tid not in active_ids_this_frame:
                             pts_list.append(None)
-                        
-                        # Maintain 30-frame rolling window
                         if len(pts_list) > 30: pts_list.pop(0)
-                        
-                        # Draw the line for this specific ID
                         valid_pts = np.array([p for p in pts_list if p is not None], np.int32).reshape((-1, 1, 2))
                         if len(valid_pts) > 1:
                             cv2.polylines(frame, [valid_pts], False, get_color(tid), 2, cv2.LINE_AA)
 
                 process.stdin.write(frame.tobytes())
+                
+                # --- PROGRESS UPDATES ---
+                frames_done += 1
+                curr_percent = int((frames_done / total_frames_to_proc) * 100)
+                
+                if progress_callback and curr_percent > last_percent:
+                    elapsed = time.time() - start_time
+                    curr_fps = frames_done / elapsed if elapsed > 0 else 0
+                    status = f"Visualizing: {mode} ({curr_fps:.1f} FPS)"
+                    progress_callback(frames_done, total_frames_to_proc, status)
+                    last_percent = curr_percent
+                
+                if not progress_callback:
+                    pbar.update(1)
+
     finally:
         cap.release()
         process.stdin.close()
         process.wait()
+        if not progress_callback:
+            pbar.close()
 
-def visualize(video_path, output_path, tracking_csv, predictions_csv=None, overlay_mode="both", buffer_sec=1.5):
+def visualize(video_path, output_path, tracking_csv, predictions_csv=None, overlay_mode="both", buffer_sec=1.5, log_callback=None, progress_callback=None):
     fps, total_frames, width, height = get_video_properties(video_path)
 
     df = pd.read_csv(tracking_csv)
@@ -129,13 +148,11 @@ def visualize(video_path, output_path, tracking_csv, predictions_csv=None, overl
         df["cx"] = (df["x1"] + df["x2"]) / 2
         df["cy"] = (df["y1"] + df["y2"]) / 2
     
-    # group by frame
     lookup = df.groupby("frame").apply(
         lambda x: x.to_dict("records"), 
         include_groups=False
     ).to_dict()
 
-    # 2. Segment Generation (Unchanged)
     segments = []
     if predictions_csv and os.path.exists(predictions_csv):
         p = pd.read_csv(predictions_csv)
@@ -157,11 +174,11 @@ def visualize(video_path, output_path, tracking_csv, predictions_csv=None, overl
     # 3. Execution
     if overlay_mode == "all":
         viz_out = output_path.replace(".mp4", "_visualized.mp4")
-        run_processing(segments, video_path, viz_out, lookup, "both", fps, width, height)
+        run_processing(segments, video_path, viz_out, lookup, "both", fps, width, height, log_callback, progress_callback)
         cut_out = output_path.replace(".mp4", "_cuts.mp4")
-        run_processing(segments, video_path, cut_out, lookup, "cut", fps, width, height)
+        run_processing(segments, video_path, cut_out, lookup, "cut", fps, width, height, log_callback, progress_callback)
     else:
         viz_out = output_path.replace(".mp4", f"_{overlay_mode}.mp4")
-        run_processing(segments, video_path, viz_out, lookup, overlay_mode, fps, width, height)
+        run_processing(segments, video_path, viz_out, lookup, overlay_mode, fps, width, height, log_callback, progress_callback)
 
     if os.path.exists("tmp"): shutil.rmtree("tmp")

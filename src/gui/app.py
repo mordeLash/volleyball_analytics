@@ -47,6 +47,14 @@ class VolleyballAnalyticsGUI(ctk.CTk):
         self.output_picker = FilePicker(self, "Output Folder:", self.output_dir, mode="folder")
         self.output_picker.pack(pady=5, padx=20, fill="x")
 
+        # Add Progress Bar
+        self.progress_bar = ctk.CTkProgressBar(self)
+        self.progress_bar.pack(pady=(10, 0), padx=20, fill="x")
+        self.progress_bar.set(0)
+        
+        self.progress_label = ctk.CTkLabel(self, text="Status: Idle", font=("Roboto", 12))
+        self.progress_label.pack(pady=(0, 10))
+
         # --- Advanced Options Toggle ---
         self.adv_toggle_btn = ctk.CTkButton(self, text="▶ Advanced Options", fg_color="transparent", 
                                             text_color=("gray10", "gray90"), anchor="w", 
@@ -119,9 +127,16 @@ class VolleyballAnalyticsGUI(ctk.CTk):
         thread.daemon = True
         thread.start()
 
+    def update_gui_progress(self, current, total, description):
+        """Thread-safe update for the GUI progress bar."""
+        percent = current / total
+        # Use .after to ensure UI updates happen on the main thread
+        self.after(0, lambda: self.progress_bar.set(percent))
+        self.after(0, lambda: self.progress_label.configure(text=f"{description}: {int(percent*100)}%"))
+
     def execute_run(self, config):
         try:
-            success, output_path = run_volleyball_pipeline(config, self.log)
+            success, output_path = run_volleyball_pipeline(config, self.log, self.update_gui_progress)
             if success:
                 self.log("Pipeline Finished Successfully!")
                 messagebox.showinfo("Success", f"Pipeline complete!\nSaved to: {output_path}")

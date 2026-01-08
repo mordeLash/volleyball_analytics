@@ -1,75 +1,92 @@
 import cv2
 import csv
+import time
 from ultralytics import YOLO
 from tqdm import tqdm
 
-def get_ball_detections(model_path, video_path, output_csv, device='cpu'):
+def get_ball_detections(model_path, video_path, output_csv, device='cpu', log_callback=None, progress_callback=None):
     """
     Runs YOLO inference on a video and saves detections to a CSV file.
-
-    This function utilizes a generator-based approach to handle large video files 
-    efficiently without overloading memory. It captures bounding box coordinates, 
-    class IDs, and confidence scores for every detection.
+    Supports throttled progress reporting for GUI and standard tqdm for CLI.
 
     Args:
-        model_path (str): Path to the exported YOLO model weights (e.g., .pt or .engine).
-        video_path (str): Path to the input volleyball video file.
-        output_csv (str): Path where the detection results will be saved.
-        device (str): Device to run inference on ('cpu', '0', 'cuda', etc.). 
-            Defaults to 'cpu'.
-
-    Returns:
-        None: Results are written directly to the specified CSV file.
+        model_path (str): Path to YOLO model weights.
+        video_path (str): Path to input video.
+        output_csv (str): Path to save CSV results.
+        device (str): Inference device ('cpu', 'cuda', etc.).
+        progress_callback (func): Optional function(current, total, status_text) for GUI updates.
     """
-    # Initialize YOLO model for detection task
+    # Initialize YOLO model
     model = YOLO(model_path, task="detect")
 
-    # Get total frames to initialize the tqdm progress bar
+    # Get total frames for progress tracking
     cap = cv2.VideoCapture(video_path)
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     cap.release()
 
-    # Generator for inference: stream=True reduces memory usage by yielding 
-    # results one frame at a time rather than loading the whole video.
+    if total_frames <= 0:
+        raise ValueError("Could not determine frame count or video is empty.")
+
+    # Generator for inference
     results = model.predict(
         source=video_path,
         device=device,
-        conf=0.1,    # Low threshold to capture all potential ball movements
-        iou=0,       # only tracking one class (the ball), so IOU threshold is less relevant
+        conf=0.1,
+        iou=0,
         imgsz=640,
         stream=True, 
         verbose=False
     )
 
-    print(f"Starting inference on {total_frames} frames...")
+    # Throttling and Timing Variables
+    last_percent = -1
+    start_time = time.time()
     
-    # Open CSV in write mode and define the header
+    # Standard terminal progress bar (only enabled if no GUI callback is provided)
+    pbar = tqdm(total=total_frames, desc="Processing Video", unit="frame", disable=(progress_callback is not None))
+
+    log_callback(f"Starting inference on {total_frames} frames...")
+    
     with open(output_csv, mode='w', newline='') as f:
         writer = csv.writer(f)
         writer.writerow(['frame', 'class', 'conf', 'x1', 'y1', 'x2', 'y2'])
 
-        # Progress bar context
-        with tqdm(total=total_frames, desc="Processing Video", unit="frame") as pbar:
-            for frame_count, result in enumerate(results):
-                boxes = result.boxes
-                if len(boxes) > 0:
-                    # Move the entire tensor to CPU and convert to 
-                    # numpy in one go to avoid repeated synchronization overhead.
-                    data = boxes.data.cpu().numpy() 
-                    # Row format: [x1, y1, x2, y2, conf, class]
+        for frame_count, result in enumerate(results):
+            current_frame = frame_count + 1
+            
+            # --- DATA EXTRACTION ---
+            boxes = result.boxes
+            if len(boxes) > 0:
+                data = boxes.data.cpu().numpy() 
+                rows = []
+                for row in data:
+                    rows.append([
+                        frame_count, 
+                        int(row[5]),          # class_id
+                        f"{row[4]:.4f}",      # confidence
+                        int(row[0]), int(row[1]), int(row[2]), int(row[3]) # x1, y1, x2, y2
+                    ])
+                writer.writerows(rows)
 
-                    rows = []
-                    for row in data:
-                        rows.append([
-                            frame_count, 
-                            int(row[5]),          # class_id
-                            f"{row[4]:.4f}",      # confidence (4 decimal places)
-                            int(row[0]), int(row[1]), int(row[2]), int(row[3]) # x1, y1, x2, y2
-                        ])
-                    
-                    # Write all detections for the current frame at once
-                    writer.writerows(rows)
-
+            # --- PROGRESS REPORTING ---
+            # Calculate integer percentage (0-100)
+            current_percent = int((current_frame / total_frames) * 100)
+            
+            # Only trigger GUI updates when the percentage integer changes
+            if progress_callback and current_percent > last_percent:
+                elapsed = time.time() - start_time
+                fps = current_frame / elapsed
+                
+                # Send update to GUI
+                status = f"Detecting Ball ({fps:.1f} FPS)"
+                progress_callback(current_frame, total_frames, status)
+                last_percent = current_percent
+            
+            # Standard CLI update (tqdm handles its own internal throttling for terminal)
+            if not progress_callback:
                 pbar.update(1)
 
-    print(f"\nProcessing complete. Results saved to {output_csv}")
+    if not progress_callback:
+        pbar.close()
+    progress_callback(100, 100, "Detection Complete")
+    log_callback(f"\nProcessing complete. Results saved to {output_csv}")

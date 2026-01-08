@@ -8,13 +8,13 @@ from src.utils.utils import get_resource_path
 from src.utils.manipulate_video import ensure_30fps, trim_video
 from src.ball_detector.get_ball_detections import get_ball_detections
 from src.ball_detector.track_ball_detections import track_with_physics_predictive
-from src.ball_detector.clean_tracking_data import clean_noise_v2
+from src.ball_detector.clean_tracking_data import clean_noise
 from src.rally_predictor.extract_features import extract_features
 from src.rally_predictor.rf_predictor import predict_rallies
 from src.rally_predictor.predictions_handler import analyze_rally_stats, smooth_predictions
 from src.visualizer.visualize_data import visualize
 
-def run_volleyball_pipeline(config, log_callback):
+def run_volleyball_pipeline(config, log_callback, progress_callback=None):
     """
     Executes the volleyball analytics pipeline with support for 
     modular entry/exit points and visualization control.
@@ -81,7 +81,9 @@ def run_volleyball_pipeline(config, log_callback):
             model_path=get_resource_path("models/ball_detection/vbn11_openvino_model_1"), 
             video_path=working_video, 
             output_csv=fn_detections, 
-            device=config['device']
+            device=config['device'],
+            log_callback=log_callback,
+            progress_callback=progress_callback
         )
 
     # Stage: Tracking
@@ -92,7 +94,7 @@ def run_volleyball_pipeline(config, log_callback):
     # Stage: Cleaning
     if should_run("cleaning"):
         log_callback("--- Running Stage: Cleaning ---")
-        clean_noise_v2(tracking_csv=fn_tracks, output_csv=fn_clean)
+        clean_noise(tracking_csv=fn_tracks, output_csv=fn_clean)
 
     # Stage: Features
     if should_run("features"):
@@ -112,7 +114,12 @@ def run_volleyball_pipeline(config, log_callback):
         pd.DataFrame({'label': preds}).to_csv(fn_predictions, index=False)
         
         stats, _ = analyze_rally_stats(preds)
-        log_callback(f"Rally Stats: {stats}")
+
+        # Format the stats for a clean output
+        log_callback("\n--- Rally Analysis Results ---")
+        for key, value in stats.items():
+            log_callback(f" • {key}: {value}")
+        log_callback("------------------------------\n")
 
     # Stage: Visualization (Runs if it's the final stage OR if Visualize Early is checked)
     if should_run("visualization") or (config.get('viz_early') and working_video):
@@ -127,7 +134,9 @@ def run_volleyball_pipeline(config, log_callback):
             output_path=final_video_output,
             tracking_csv=track_file, 
             predictions_csv=pred_file, 
-            overlay_mode=config['viz_type']
+            overlay_mode=config['viz_type'],
+            log_callback=log_callback,
+            progress_callback=progress_callback
         )
 
     # 4. FINALIZE
