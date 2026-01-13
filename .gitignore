@@ -13,10 +13,13 @@ dist/
 build/
 bin/
 
+yolo11n.pt
+
 # Video files and datasets
 *.mp4
 *.avi
 *.mov
+*.csv
 
 
 # --- Environment Secrets ---
@@ -24,3 +27,4 @@ output/table_data
 output/temp
 .env
 *.spec
+

@@ -126,4 +126,142 @@ def extract_features(input_csv, output_csv, window_size=60, start_frame=0, inter
     df['is_low_window'] = rolling['is_low'].mean()
     
     df.to_csv(output_csv, index=False)
+
+
+def extract_features_v2(input_csv,output_csv, window_size=45, start_frame=0, interpolation_size=5):
+    """
+    Transforms raw tracking coordinates into physics-based features.
+    Updated to provide TWO windows: 
+    - 'prev_': Statistics of frames BEFORE the current frame.
+    - 'next_': Statistics of frames AFTER the current frame.
+    """
+    df = pd.read_csv(input_csv)
+    
+    # 1. TIMELINE EXPANSION (Same as before)
+    df = df.sort_values('frame')
+    full_range = pd.DataFrame({'frame': range(start_frame, int(df['frame'].max()) + 1)})
+    df = pd.merge(full_range, df, on='frame', how='left')
+    
+    # Fill tiny gaps
+    df['cx'] = df['cx'].interpolate(limit=interpolation_size) # Placeholder for your interpolate function
+    df['cy'] = df['cy'].interpolate(limit=interpolation_size)
+    df['conf'] = df['conf'].fillna(0)
+    
+    # 2. BASIC PHYSICS (Vectorized)
+    df['vx'] = df['cx'].diff().fillna(0)
+    df['vy'] = df['cy'].diff().fillna(0)
+    df['velocity'] = np.sqrt(df['vx']**2 + df['vy']**2).clip(upper=300)
+    df['acceleration'] = df['velocity'].diff().fillna(0)
+    df['energy'] = df['velocity']**2
+
+    # Extra
+    
+    
+    # 3. DEFINE ROLLING OBJECTS
+    # 'Past' window: looks at window_size frames ending at current frame
+    # We use closed='left' to ensure the CURRENT frame isn't included in the past stats
+    past_rolling = df.rolling(window=window_size, min_periods=1, closed='left')
+    
+    # 'Future' window: We shift the dataframe backwards and then roll
+    # This effectively looks at window_size frames starting AFTER the current frame
+    future_rolling = df.shift(-window_size).rolling(window=window_size, min_periods=1)
+
+    # 4. APPLY ROLLING STATS
+    # List of features to calculate for both windows
+    features_to_roll = ['cy','cx', 'velocity', 'acceleration', 'energy', 'conf']
+    df_features = pd.DataFrame()
+    for feat in features_to_roll:
+        # Past features
+        df_features[f'prev_mean_{feat}'] = past_rolling[feat].mean()
+        df_features[f'prev_max_{feat}'] = past_rolling[feat].max()
+        df_features[f'prev_std_{feat}'] = past_rolling[feat].std().fillna(0)
+        
+        # Future features
+        df_features[f'next_mean_{feat}'] = future_rolling[feat].mean()
+        df_features[f'next_max_{feat}'] = future_rolling[feat].max()
+        df_features[f'next_std_{feat}'] = future_rolling[feat].std().fillna(0)
+
+
+    
+
+    # Clean up NaNs created by windows at the very start/end of the video
+    df_features = df_features.fillna(0)
+    
+    df_features.to_csv(output_csv, index=False)
+    
+
+
+def extract_features_v3(input_csv, output_csv, window_size=45, start_frame=0, interpolation_size=5):
+    """
+    Transforms raw tracking coordinates into physics-based features.
+    Updated to prioritize 'Visibility' (binary presence) over raw confidence.
+    """
+    df = pd.read_csv(input_csv)
+    
+    # 1. TIMELINE EXPANSION
+    df = df.sort_values('frame')
+    full_range = pd.DataFrame({'frame': range(start_frame, int(df['frame'].max()) + 1)})
+    df = pd.merge(full_range, df, on='frame', how='left')
+    
+    # Define visibility BEFORE interpolation
+    # A frame is "visible" if it has a detection (conf > 0)
+    df['is_visible'] = (df['conf'] > 0).astype(int)
+    
+    # Fill tiny gaps for physics calculation
+    df['cx'] = df['cx'].interpolate(limit=interpolation_size)
+    df['cy'] = df['cy'].interpolate(limit=interpolation_size)
+    
+    # 2. BASIC PHYSICS (Vectorized)
+    df['vx'] = df['cx'].diff().fillna(0)
+    df['vy'] = df['cy'].diff().fillna(0)
+    df['velocity'] = np.sqrt(df['vx']**2 + df['vy']**2).clip(upper=300)
+    df['acceleration'] = df['velocity'].diff().fillna(0)
+    df['energy'] = df['velocity']**2
+
+    # 3. DEFINE ROLLING OBJECTS
+    # 'Past' window: frames BEFORE the current frame
+    past_rolling = df.rolling(window=window_size, min_periods=1, closed='left')
+    
+    # 'Future' window: frames STARTING at the current frame
+    future_rolling = df.shift(-window_size).rolling(window=window_size, min_periods=1)
+
+    # 4. APPLY ROLLING STATS
+    # Features to calculate standard stats for
+    physics_feats = ['cy', 'cx', 'velocity', 'acceleration', 'energy']
+    df_features = pd.DataFrame()
+    
+    for feat in physics_feats:
+        # Past physics
+        df_features[f'prev_mean_{feat}'] = past_rolling[feat].mean()
+        df_features[f'prev_max_{feat}'] = past_rolling[feat].max()
+        df_features[f'prev_std_{feat}'] = past_rolling[feat].std().fillna(0)
+        
+        # Future physics
+        df_features[f'next_mean_{feat}'] = future_rolling[feat].mean()
+        df_features[f'next_max_{feat}'] = future_rolling[feat].max()
+        df_features[f'next_std_{feat}'] = future_rolling[feat].std().fillna(0)
+    
+    # 5. VISIBILITY FEATURES (The core change)
+    # Instead of mean/max confidence, we look at the "Visibility Ratio"
+    # This tells us: "What percentage of this window actually contains a detected ball?"
+    df_features['prev_visibility_ratio'] = past_rolling['is_visible'].mean()
+    df_features['next_visibility_ratio'] = future_rolling['is_visible'].mean()
+    
+    # Visibility Delta: Captures the moment the ball enters or leaves the scene
+    # High positive = Ball just appeared (Serve)
+    # High negative = Ball just disappeared (Out of bounds / Net)
+    df_features['visibility_delta'] = df_features['next_visibility_ratio'] - df_features['prev_visibility_ratio']
+
+    # 6. CLEAN UP
+    # Merge back the frame number for reference
+    df_features['frame'] = df['frame']
+    
+    # Fill NaNs created by windows at the edges
+    df_features = df_features.fillna(0)
+    
+    # Reorder columns to put frame first
+    cols = ['frame'] + [c for c in df_features.columns if c != 'frame']
+    df_features = df_features[cols]
+    
+    df_features.to_csv(output_csv, index=False)
     

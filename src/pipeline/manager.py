@@ -6,8 +6,9 @@ import yaml
 import pandas as pd
 from src.utils import get_resource_path, ensure_30fps, trim_video 
 from src.ball_detector import get_ball_detections, track_with_physics_predictive, clean_noise
-from src.rally_predictor import extract_features,predict_rallies,analyze_rally_stats,smooth_predictions
+from src.rally_predictor import predict_rallies,analyze_rally_stats,smooth_predictions
 from src.visualizer import visualize
+from src.rally_predictor.extract_features import extract_features_v2 as extract_features
 
 def run_volleyball_pipeline(config, log_callback, progress_callback=None):
     """

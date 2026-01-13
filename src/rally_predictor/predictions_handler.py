@@ -116,3 +116,43 @@ def analyze_rally_stats(predictions, fps=30):
     }
     
     return stats, segments
+
+
+def get_error_streaks(y_true, y_pred):
+    """
+    Calculates the longest continuous sequence of:
+    1. False Rallies (FP): Predicting 'Rally' during 'Downtime'.
+    2. False Downtime (FN): Predicting 'Downtime' during 'Rally'.
+    """
+    # Convert to numpy for fast operations
+    y_true = np.array(y_true)
+    y_pred = np.array(y_pred)
+    
+    # 1. Longest False Rally (Predicted 1, but actually 0)
+    false_rallies = (y_pred == 1) & (y_true == 0)
+    
+    # 2. Longest False Downtime (Predicted 0, but actually 1)
+    false_downtime = (y_pred == 0) & (y_true == 1)
+    
+    def max_consecutive(bool_array):
+        # Using a trick: find where the array changes from False to True
+        # and measure the gaps.
+        if not np.any(bool_array): return 0
+        # Add padding to catch streaks at the beginning/end
+        padded = np.diff(np.where(np.concatenate(([False], bool_array, [False])))[0])
+        # We only want gaps between True values that are actually consecutive
+        # but a simpler iterative approach is often clearer for this:
+        max_streak = 0
+        current = 0
+        for val in bool_array:
+            if val:
+                current += 1
+                max_streak = max(max_streak, current)
+            else:
+                current = 0
+        return max_streak
+
+    return {
+        "False Rally": max_consecutive(false_rallies),
+        "False Downtime": max_consecutive(false_downtime)
+    }
