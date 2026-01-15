@@ -12,7 +12,7 @@ class VolleyballAnalyticsGUI(ctk.CTk):
     def __init__(self):
         super().__init__()
         self.title("Volleyball Playtime Extractor")
-        self.geometry("850x900")
+        self.geometry("700x800")
         ctk.set_appearance_mode("dark")
         
         # State Variables

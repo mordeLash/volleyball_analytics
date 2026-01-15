@@ -101,31 +101,32 @@ def extract_features(input_csv, output_csv, window_size=60, start_frame=0, inter
     # Using center=True allows the model to "see" a bit of the past and future 
     # when determining if the current frame is part of a rally.
     rolling = df.rolling(window=window_size, center=True, min_periods=1)
-    
-    df['mean_x'] = rolling['cx'].mean()
-    df['mean_y'] = rolling['cy'].mean()
-    df['std_x'] = rolling['cx'].std().fillna(0)
-    df['std_y'] = rolling['cy'].std().fillna(0)
-    df['mean_velocity'] = rolling['velocity'].mean()
-    df['max_velocity'] = rolling['velocity'].max()
-    df['std_velocity'] = rolling['velocity'].std().fillna(0)
-    df['mean_acceleration'] = rolling['acceleration'].mean()
-    df['mean_angle_change'] = rolling['angle_diff'].mean()
-    df['mean_y_dominance'] = rolling['y_dominance'].mean()
-    df['mean_accel_jitter'] = rolling['accel_jitter'].mean()
-    df['mean_energy'] = rolling['energy'].mean()
+    df_features = pd.DataFrame()
+
+    df_features['mean_x'] = rolling['cx'].mean()
+    df_features['mean_y'] = rolling['cy'].mean()
+    df_features['std_x'] = rolling['cx'].std().fillna(0)
+    df_features['std_y'] = rolling['cy'].std().fillna(0)
+    df_features['mean_velocity'] = rolling['velocity'].mean()
+    df_features['max_velocity'] = rolling['velocity'].max()
+    df_features['std_velocity'] = rolling['velocity'].std().fillna(0)
+    df_features['mean_acceleration'] = rolling['acceleration'].mean()
+    df_features['mean_angle_change'] = rolling['angle_diff'].mean()
+    df_features['mean_y_dominance'] = rolling['y_dominance'].mean()
+    df_features['mean_accel_jitter'] = rolling['accel_jitter'].mean()
+    df_features['mean_energy'] = rolling['energy'].mean()
     
     # y_range_window: Measures the vertical "spread." Rallies have huge ranges;
     # someone holding a ball has a very narrow vertical range.
-    df['y_range_window'] = rolling['cy'].max() - rolling['cy'].min()
+    df_features['y_range_window'] = rolling['cy'].max() - rolling['cy'].min()
     
     # Visibility/Confidence consistency: Rallies often have lower/varied confidence
     # due to motion blur, unlike static downtime.
-    df['mean_vis'] = rolling['conf'].mean()
-    df['vis_std'] = rolling['conf'].std().fillna(0)
-    df['is_low_window'] = rolling['is_low'].mean()
+    df_features['mean_vis'] = rolling['conf'].mean()
+    df_features['vis_std'] = rolling['conf'].std().fillna(0)
+    df_features['is_low_window'] = rolling['is_low'].mean()
     
-    df.to_csv(output_csv, index=False)
+    df_features.to_csv(output_csv, index=False)
 
 
 def extract_features_v2(input_csv,output_csv, window_size=45, start_frame=0, interpolation_size=5):
@@ -145,7 +146,6 @@ def extract_features_v2(input_csv,output_csv, window_size=45, start_frame=0, int
     # Fill tiny gaps
     df['cx'] = df['cx'].interpolate(limit=interpolation_size) # Placeholder for your interpolate function
     df['cy'] = df['cy'].interpolate(limit=interpolation_size)
-    df['conf'] = df['conf'].fillna(0)
     
     # 2. BASIC PHYSICS (Vectorized)
     df['vx'] = df['cx'].diff().fillna(0)
@@ -168,7 +168,7 @@ def extract_features_v2(input_csv,output_csv, window_size=45, start_frame=0, int
 
     # 4. APPLY ROLLING STATS
     # List of features to calculate for both windows
-    features_to_roll = ['cy','cx', 'velocity', 'acceleration', 'energy', 'conf']
+    features_to_roll = ['cy','cx', 'velocity', 'acceleration', 'energy']
     df_features = pd.DataFrame()
     for feat in features_to_roll:
         # Past features
@@ -190,11 +190,10 @@ def extract_features_v2(input_csv,output_csv, window_size=45, start_frame=0, int
     df_features.to_csv(output_csv, index=False)
     
 
-
 def extract_features_v3(input_csv, output_csv, window_size=45, start_frame=0, interpolation_size=5):
     """
-    Transforms raw tracking coordinates into physics-based features.
-    Updated to prioritize 'Visibility' (binary presence) over raw confidence.
+    Transforms raw tracking coordinates into physics-based features, 
+    normalized by ball dimensions (w, h).
     """
     df = pd.read_csv(input_csv)
     
@@ -203,65 +202,69 @@ def extract_features_v3(input_csv, output_csv, window_size=45, start_frame=0, in
     full_range = pd.DataFrame({'frame': range(start_frame, int(df['frame'].max()) + 1)})
     df = pd.merge(full_range, df, on='frame', how='left')
     
-    # Define visibility BEFORE interpolation
-    # A frame is "visible" if it has a detection (conf > 0)
-    df['is_visible'] = (df['conf'] > 0).astype(int)
-    
-    # Fill tiny gaps for physics calculation
-    df['cx'] = df['cx'].interpolate(limit=interpolation_size)
-    df['cy'] = df['cy'].interpolate(limit=interpolation_size)
-    
-    # 2. BASIC PHYSICS (Vectorized)
+    # Fill gaps for coordinates and dimensions
+    for col in ['cx', 'cy', 'w', 'h']:
+        df[col] = df[col].interpolate(limit=interpolation_size)
+
+    # 2. BASIC PHYSICS (Pixel-based)
     df['vx'] = df['cx'].diff().fillna(0)
     df['vy'] = df['cy'].diff().fillna(0)
-    df['velocity'] = np.sqrt(df['vx']**2 + df['vy']**2).clip(upper=300)
-    df['acceleration'] = df['velocity'].diff().fillna(0)
-    df['energy'] = df['velocity']**2
+    
+    # 3. DIMENSION-BASED CALCULATIONS
+    # We use the average of width and height as a "unit" of scale
+    df['ball_scale'] = (df['w'] + df['h']) / 2
+    df['ball_scale'].rolling(window=3).mean()
+    
+    # Avoid division by zero if the ball is lost for a long period
+    df['ball_scale'] = df['ball_scale'].replace(0, np.nan).ffill().fillna(1)
 
-    # 3. DEFINE ROLLING OBJECTS
-    # 'Past' window: frames BEFORE the current frame
+    df['vz_norm'] = df['ball_scale'].diff().fillna(0) / df['ball_scale']
+
+    # Normalized Velocity: How many "ball sizes" did it move?
+    v_xy_norm = np.sqrt(df['vx']**2 + df['vy']**2) / df['ball_scale']
+    df['v_norm'] = np.sqrt(v_xy_norm**2 + df['vz_norm']**2)
+    
+    # Normalized Acceleration
+    df['a_norm'] = df['v_norm'].diff().fillna(0)
+    
+    # Normalized Energy (Kinetic energy is proportional to v^2)
+    df['e_norm'] = df['v_norm']**2
+    
+
+
+    # 4. DEFINE ROLLING OBJECTS
+    # 'Past' window: looks at window_size frames before current
     past_rolling = df.rolling(window=window_size, min_periods=1, closed='left')
     
-    # 'Future' window: frames STARTING at the current frame
+    # 'Future' window: looks at window_size frames after current
     future_rolling = df.shift(-window_size).rolling(window=window_size, min_periods=1)
 
-    # 4. APPLY ROLLING STATS
-    # Features to calculate standard stats for
-    physics_feats = ['cy', 'cx', 'velocity', 'acceleration', 'energy']
-    df_features = pd.DataFrame()
+    rolling = df.rolling(window=window_size, center=True, min_periods=1)
+
+    # 5. APPLY ROLLING STATS
+    # We prioritize normalized features for the ML model
+    features_to_roll = ['v_norm','a_norm','e_norm','cy','cx']
+    df_features = pd.DataFrame() 
     
-    for feat in physics_feats:
-        # Past physics
+    for feat in features_to_roll:
+        # Past features
         df_features[f'prev_mean_{feat}'] = past_rolling[feat].mean()
         df_features[f'prev_max_{feat}'] = past_rolling[feat].max()
         df_features[f'prev_std_{feat}'] = past_rolling[feat].std().fillna(0)
         
-        # Future physics
+        # Future features
         df_features[f'next_mean_{feat}'] = future_rolling[feat].mean()
         df_features[f'next_max_{feat}'] = future_rolling[feat].max()
         df_features[f'next_std_{feat}'] = future_rolling[feat].std().fillna(0)
-    
-    # 5. VISIBILITY FEATURES (The core change)
-    # Instead of mean/max confidence, we look at the "Visibility Ratio"
-    # This tells us: "What percentage of this window actually contains a detected ball?"
-    df_features['prev_visibility_ratio'] = past_rolling['is_visible'].mean()
-    df_features['next_visibility_ratio'] = future_rolling['is_visible'].mean()
-    
-    # Visibility Delta: Captures the moment the ball enters or leaves the scene
-    # High positive = Ball just appeared (Serve)
-    # High negative = Ball just disappeared (Out of bounds / Net)
-    df_features['visibility_delta'] = df_features['next_visibility_ratio'] - df_features['prev_visibility_ratio']
 
-    # 6. CLEAN UP
-    # Merge back the frame number for reference
-    df_features['frame'] = df['frame']
-    
-    # Fill NaNs created by windows at the edges
+        # now features
+        df_features[f'mean_{feat}'] = rolling[feat].mean()
+        df_features[f'max_{feat}'] = rolling[feat].max()
+        df_features[f'std_{feat}'] = rolling[feat].std().fillna(0)   
+
+    # Clean up
     df_features = df_features.fillna(0)
-    
-    # Reorder columns to put frame first
-    cols = ['frame'] + [c for c in df_features.columns if c != 'frame']
-    df_features = df_features[cols]
-    
     df_features.to_csv(output_csv, index=False)
-    
+    return df_features
+
+

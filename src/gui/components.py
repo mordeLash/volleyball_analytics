@@ -40,7 +40,7 @@ class AdvancedOptionsFrame(ctk.CTkFrame):
         # --- Section 1: Pipeline Flow ---
         self.create_header("Pipeline Control", 0)
 
-        stages = ["detection", "tracking", "cleaning", "features", "prediction", "visualization"]
+        stages = ["detection", "tracking", "cleaning", "calibration","features", "prediction", "visualization"]
         
         ctk.CTkLabel(self, text="Start At:").grid(row=1, column=0, padx=(20, 10), pady=5, sticky="w")
         ctk.CTkComboBox(self, values=stages, variable=variables['start_at']).grid(row=1, column=1, padx=10, pady=5, sticky="ew")

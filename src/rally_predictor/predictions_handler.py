@@ -3,7 +3,7 @@
 import pandas as pd
 import numpy as np
 
-def smooth_predictions(predictions, window_size=5, min_segment_len=60):
+def smooth_predictions(predictions, window_size=5, min_segment_len=30):
     """
     Cleans up classification jitter by removing impossible short-duration segments.
 

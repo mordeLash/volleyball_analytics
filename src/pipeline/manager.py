@@ -5,17 +5,20 @@ import shutil
 import yaml
 import pandas as pd
 from src.utils import get_resource_path, ensure_30fps, trim_video 
-from src.ball_detector import get_ball_detections, track_with_physics_predictive, clean_noise
+from src.ball_detector import get_ball_detections
+from src.ball_detector.track_ball_detections import track_with_physics_predictive_v2 as track_with_physics_predictive
+from src.ball_detector.clean_tracking_data import clean_noise_v2 as clean_noise
 from src.rally_predictor import predict_rallies,analyze_rally_stats,smooth_predictions
 from src.visualizer import visualize
-from src.rally_predictor.extract_features import extract_features_v2 as extract_features
+from src.rally_predictor.extract_features import extract_features_v3 as extract_features
+from src.ball_detector.calibrate_detections import calibrate_to_relative_space
 
 def run_volleyball_pipeline(config, log_callback, progress_callback=None):
     """
     Executes the volleyball analytics pipeline with support for 
     modular entry/exit points and visualization control.
     """
-    STAGES = ["detection", "tracking", "cleaning", "features", "prediction", "visualization"]
+    STAGES = ["detection", "tracking", "cleaning", "features","calibration", "prediction", "visualization"]
     
     # Map start/stop names to indices for logical comparison
     start_idx = STAGES.index(config.get('start_at', 'detection'))
@@ -42,7 +45,8 @@ def run_volleyball_pipeline(config, log_callback, progress_callback=None):
     # If we skip a stage, we use the custom input CSV for that stage's requirement
     fn_detections = config['input_csv_path'] if config['start_at'] == "tracking" else os.path.join(temp_dir, f"{base_name}_detections.csv")
     fn_tracks = config['input_csv_path'] if config['start_at'] == "cleaning" else os.path.join(temp_dir, f"{base_name}_tracks.csv")
-    fn_clean = config['input_csv_path'] if config['start_at'] == "features" else os.path.join(temp_dir, f"{base_name}_cleaned.csv")
+    fn_clean = config['input_csv_path'] if config['start_at'] == "calibration" else os.path.join(temp_dir, f"{base_name}_calibrated.csv")
+    fn_calibrate = config['input_csv_path'] if config['start_at'] == "features" else os.path.join(temp_dir, f"{base_name}_cleaned.csv")
     
     fn_features = os.path.join(temp_dir, f"{base_name}_features.csv")
     fn_predictions = os.path.join(temp_dir, f"{base_name}_predictions.csv")
@@ -92,11 +96,16 @@ def run_volleyball_pipeline(config, log_callback, progress_callback=None):
         log_callback("--- Running Stage: Cleaning ---")
         clean_noise(tracking_csv=fn_tracks, output_csv=fn_clean)
 
+    # Stage: Calibration
+    if should_run("calibration"):
+        log_callback("--- Running Stage: Calibration ---")
+        calibrate_to_relative_space(fn_clean, output_csv=fn_calibrate)
+
     # Stage: Features
     if should_run("features"):
         log_callback("--- Running Stage: Features ---")
         extract_features(
-            input_csv=fn_clean, 
+            input_csv=fn_calibrate, 
             output_csv=fn_features, 
             window_size=feature_params.get("window_size", 60),
             interpolation_size=feature_params.get("interpolation_size", 5)

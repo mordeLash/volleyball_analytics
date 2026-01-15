@@ -1,9 +1,10 @@
 from tqdm import tqdm
 
 from src.rally_predictor.rf_predictor import train_random_forest
-from src.ball_detector.track_ball_detections import track_with_physics_predictive
-from src.ball_detector.clean_tracking_data import clean_noise
-from src.rally_predictor.extract_features import extract_features_v2 as extract_features
+from src.ball_detector.track_ball_detections import track_with_physics_predictive_v2 as track_with_physics_predictive
+from src.ball_detector.clean_tracking_data import clean_noise_v2 as clean_noise
+from src.ball_detector.calibrate_detections import calibrate_to_relative_space
+from src.rally_predictor.extract_features import extract_features_v3 as extract_features
 
 def main():
     """
@@ -28,13 +29,17 @@ def main():
     # We include data from three different games to provide the model with 
     # a diverse set of examples (different serving styles, camera angles, etc.)
 # Define your game names
-    data_names = ["game1_set1", "game5_set1", "game9_c"]
+    data_names = ["game1_set1", 
+                  "game5_set1", 
+                  "game9_c"
+    ]
 
     # Define the standard file suffixes you need for every game
     file_suffixes = [
         "detections.csv",
         "tracks.csv",
         "cleaned.csv",
+        "calibrated.csv",
         "features.csv"
     ]
 
@@ -49,8 +54,9 @@ def main():
     for data_csv in tqdm(data_csvs):
         track_with_physics_predictive(data_csv[0],data_csv[1])
         clean_noise(data_csv[1],data_csv[2])
-        extract_features(data_csv[2],data_csv[3],window_size=45,interpolation_size=5)
-        feature_csvs.append(data_csv[3])
+        calibrate_to_relative_space(data_csv[2],data_csv[3])
+        extract_features(data_csv[3],data_csv[4],window_size=45,interpolation_size=10)
+        feature_csvs.append(data_csv[4])
     
 
     # These must match the order of the feature_csvs list

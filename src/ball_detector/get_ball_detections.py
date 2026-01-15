@@ -19,6 +19,8 @@ def get_ball_detections(model_path, video_path, output_csv, device='cpu', log_ca
         progress_callback (func): Optional function(current, total, status_text) for GUI updates.
     """
     # Initialize YOLO model
+    model_path = r'C:\Users\morde\Desktop\projects\volleyball_cv_project\src\_notebooks\netball2_openvino_model'
+
     model = YOLO(model_path, task="detect")
 
     # Get total frames for progress tracking

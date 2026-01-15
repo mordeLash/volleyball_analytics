@@ -2,7 +2,8 @@
 
 import pandas as pd
 import numpy as np
-
+from sklearn.cluster import KMeans
+from sklearn.preprocessing import StandardScaler
 
 
 def clean_noise(tracking_csv, output_csv):
@@ -71,3 +72,58 @@ def clean_noise(tracking_csv, output_csv):
     df_cleaned = df_cleaned.sort_values('frame').drop(columns=['quality_score'])
     
     df_cleaned.to_csv(output_csv, index=False)
+
+
+def clean_noise_v2(tracking_csv, output_csv):
+    """
+    Phase 1: Uses K-Means clustering to separate tracks into two groups: 
+    Signal (Ball) and Noise (Flickers/Stationary).
+    """
+    df = pd.read_csv(tracking_csv)
+    if df.empty: return
+
+    # 1. Feature Extraction per Track
+    stats = df.groupby('track_id').agg(
+        duration=('frame', 'count'),
+        m_conf=('conf', 'mean'),
+        min_y=('cy', 'min'), max_y=('cy', 'max'),
+        min_x=('cx', 'min'), max_x=('cx', 'max'),
+        avg_speed=('speed_px_frame', 'mean')
+    )
+    
+    stats['displacement'] = np.sqrt((stats['max_x'] - stats['min_x'])**2 + 
+                                    (stats['max_y'] - stats['min_y'])**2)
+
+    # 2. Prepare Data for Clustering
+    # We cluster based on Duration, Displacement, and Speed
+    features = ['duration', 'displacement', 'avg_speed']
+    X = stats[features].values
+    
+    # Scale features so 'duration' (frames) doesn't outweigh 'displacement' (pixels)
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
+
+    # 3. K-Means Clustering (k=2: One for Ball, One for Noise)
+    kmeans = KMeans(n_clusters=2, n_init=10, random_state=28)
+    stats['cluster'] = kmeans.fit_predict(X_scaled)
+
+    # 4. Identify which cluster is the "Ball"
+    # The ball cluster will have the HIGHER average displacement/duration
+    cluster_0_mean = stats[stats['cluster'] == 0]['displacement'].mean()
+    cluster_1_mean = stats[stats['cluster'] == 1]['displacement'].mean()
+    
+    ball_cluster_id = 0 if cluster_0_mean > cluster_1_mean else 1
+    
+    valid_ids = stats[stats['cluster'] == ball_cluster_id].index
+    
+    # 5. Filter and Deduplicate
+    df_filtered = df[df['track_id'].isin(valid_ids)].copy()
+    
+    # In case multiple 'ball' tracks overlap in one frame, keep the highest confidence
+    df_filtered = df_filtered.sort_values(by=['frame', 'conf'], ascending=[True, False])
+    df_filtered = df_filtered.drop_duplicates(subset=['frame'], keep='first')
+
+    df_filtered.to_csv(output_csv, index=False)
+    
+    n_noise = len(stats) - len(valid_ids)
+    print(f"Clustering Complete: Found {len(valid_ids)} 'Ball' tracks and {n_noise} 'Noise' tracks.")

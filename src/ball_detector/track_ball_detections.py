@@ -3,9 +3,6 @@
 import pandas as pd
 import numpy as np
 
-import pandas as pd
-import numpy as np
-
 def track_with_physics_predictive(input_csv, output_csv, min_radius=50, max_radius=250, max_gap=15, velocity_margin=0.5):
     """
     Performs predictive object tracking by combining spatial proximity with constant velocity physics.
@@ -139,4 +136,142 @@ def track_with_physics_predictive(input_csv, output_csv, min_radius=50, max_radi
                 next_id += 1
                 
     df.to_csv(output_csv, index=False)
+
+
+def track_with_physics_predictive_v2(input_csv, output_csv, 
+                                      min_radius_factor=2.5, 
+                                      max_radius=300, 
+                                      max_gap=15, 
+                                      velocity_margin=0.6, 
+                                      size_similarity_threshold=0.5):
+    """
+    Advanced tracker using size-normalized physics.
+    
+    Args:
+        min_radius_factor (float): Multiplier for ball width to set base search radius.
+                                   (e.g., 3.0 means search 3x the ball's width).
+        size_similarity_threshold (float): Max % change in width/height allowed.
+    """
+    df = pd.read_csv(input_csv).sort_values('frame')
+    
+    # 1. Feature Engineering
+    df['cx'] = (df['x1'] + df['x2']) / 2
+    df['cy'] = (df['y1'] + df['y2']) / 2
+    df['w'] = df['x2'] - df['x1']
+    df['h'] = df['y2'] - df['y1']
+    
+    # Initialize Tracking Columns
+    df['track_id'] = -1
+    df['vx'], df['vy'] = 0.0, 0.0
+    df['speed_px_frame'] = 0.0
+    
+    next_id = 0
+    active_tracks = {} # {tid: {last_pos, last_size, vx, vy, speed, last_f, stationary_count, is_static}}
+    
+    for f in sorted(df['frame'].unique()):
+        frame_indices = df[df['frame'] == f].index.tolist()
+        assigned_indices = []
+        
+        # Sort tracks to process the most recently seen ones first
+        sorted_tids = sorted(active_tracks.keys(), key=lambda x: active_tracks[x]['last_f'], reverse=True)
+        
+        for tid in sorted_tids:
+            track = active_tracks[tid]
+            
+            if track.get('is_static', False):
+                continue
+                
+            dt = f - track['last_f']
+            if dt > max_gap:
+                del active_tracks[tid]
+                continue
+            
+            # 2. SIZE-AWARE PREDICTION
+            # Predict next pixel location
+            pred_x = track['last_pos'][0] + (track['vx'] * dt)
+            pred_y = track['last_pos'][1] + (track['vy'] * dt)
+            
+            # 3. DEPTH-AWARE SEARCH RADIUS
+            # The 'base' search area is proportional to the ball's size in the image.
+            # Large ball (close) = Large search area. Small ball (far) = Small search area.
+            ball_w = track['last_size'][0]
+            base_radius = ball_w * min_radius_factor
+            
+            # Expand radius based on current velocity and time gap
+            dynamic_threshold = base_radius + (track['speed'] * dt * velocity_margin)
+            # Clip to absolute max to prevent runaway radius
+            dynamic_threshold = min(dynamic_threshold, max_radius)
+            # Ensure a floor (e.g., at least 25 pixels) so we don't lose tiny balls
+            dynamic_threshold = max(dynamic_threshold, 25)
+            
+            best_cost, best_idx = float('inf'), -1
+            
+            for idx in frame_indices:
+                if idx in assigned_indices:
+                    continue
+                
+                # A. Spatial Distance from prediction
+                dist = np.sqrt((pred_x - df.loc[idx, 'cx'])**2 + (pred_y - df.loc[idx, 'cy'])**2)
+                
+                # B. Size Consistency Check
+                # Difference in width/height relative to the previous frame
+                dw = abs(df.loc[idx, 'w'] - track['last_size'][0]) / track['last_size'][0]
+                dh = abs(df.loc[idx, 'h'] - track['last_size'][1]) / track['last_size'][1]
+                size_change = (dw + dh) / 2
+                
+                # C. Cost function: Combining distance and size penalty
+                if dist < dynamic_threshold and size_change < size_similarity_threshold:
+                    # We add size_change * 100 as a penalty to the pixel distance
+                    cost = dist + (size_change * 100)
+                    if cost < best_cost:
+                        best_cost, best_idx = cost, idx
+            
+            # 4. UPDATE TRACK STATE
+            if best_idx != -1:
+                new_pos = (df.loc[best_idx, 'cx'], df.loc[best_idx, 'cy'])
+                new_size = (df.loc[best_idx, 'w'], df.loc[best_idx, 'h'])
+                
+                # Check for stationary objects (noise filtering)
+                displacement = np.sqrt((new_pos[0] - track['last_pos'][0])**2 + 
+                                       (new_pos[1] - track['last_pos'][1])**2)
+                
+                stat_count = track.get('stationary_count', 0) + 1 if displacement < 3 else 0
+                is_static = stat_count >= 15
+                
+                # Calculate Velocity
+                vx, vy = (new_pos[0] - track['last_pos'][0]) / dt, (new_pos[1] - track['last_pos'][1]) / dt
+                speed = np.sqrt(vx**2 + vy**2)
+                
+                # Update Dataframe
+                df.at[best_idx, 'track_id'] = tid
+                df.at[best_idx, 'vx'], df.at[best_idx, 'vy'] = vx, vy
+                df.at[best_idx, 'speed_px_frame'] = speed
+                
+                # Update Memory
+                active_tracks[tid] = {
+                    'last_f': f, 
+                    'last_pos': new_pos, 
+                    'last_size': new_size,
+                    'vx': vx, 'vy': vy, 'speed': speed,
+                    'stationary_count': stat_count,
+                    'is_static': is_static
+                }
+                assigned_indices.append(best_idx)
+                
+        # 5. INITIALIZE NEW TRACKS
+        for idx in frame_indices:
+            if idx not in assigned_indices:
+                df.at[idx, 'track_id'] = next_id
+                active_tracks[next_id] = {
+                    'last_f': f, 
+                    'last_pos': (df.loc[idx, 'cx'], df.loc[idx, 'cy']),
+                    'last_size': (df.loc[idx, 'w'], df.loc[idx, 'h']),
+                    'vx': 0.0, 'vy': 0.0, 'speed': 0.0,
+                    'stationary_count': 0,
+                    'is_static': False
+                }
+                next_id += 1
+                
+    df.to_csv(output_csv, index=False)
+    print(f"Tracking complete. Results saved to {output_csv}")
                 
