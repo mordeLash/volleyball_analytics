@@ -268,3 +268,257 @@ def extract_features_v3(input_csv, output_csv, window_size=45, start_frame=0, in
     return df_features
 
 
+def extract_features_v4(input_csv, output_csv, window_size=45, start_frame=0, interpolation_size=5):
+    """
+    Transforms raw tracking coordinates into physics-based features, 
+    normalized by ball dimensions (w, h).
+    """
+    df = pd.read_csv(input_csv)
+    
+    # 1. TIMELINE EXPANSION
+    df = df.sort_values('frame')
+    full_range = pd.DataFrame({'frame': range(start_frame, int(df['frame'].max()) + 1)})
+    df = pd.merge(full_range, df, on='frame', how='left')
+    
+    # Fill gaps for coordinates and dimensions
+    for col in ['world_x', 'world_y', 'world_z',]:
+        df[col] = df[col].interpolate(limit=interpolation_size)
+
+    
+    df['world_vx'] = df['world_x'].diff().fillna(0)
+    df['world_vy'] = df['world_y'].diff().fillna(0)
+    df['world_vz'] = df['world_z'].diff().fillna(0)
+    df['world_ex'] = df['world_vx']**2
+    df['world_ey'] = df['world_vy']**2
+    df['world_ez'] = df['world_vz']**2
+    
+
+
+    # 4. DEFINE ROLLING OBJECTS
+    # 'Past' window: looks at window_size frames before current
+    past_rolling = df.rolling(window=window_size, min_periods=1, closed='left')
+    
+    # 'Future' window: looks at window_size frames after current
+    future_rolling = df.shift(-window_size).rolling(window=window_size, min_periods=1)
+
+    rolling = df.rolling(window=window_size, center=True, min_periods=1)
+
+    # 5. APPLY ROLLING STATS
+    # We prioritize normalized features for the ML model
+    features_to_roll = ['world_z','world_y','world_x',
+                        'world_vz','world_vy','world_vx',
+                        'world_ez','world_ey','world_ex',
+                        ]
+    df_features = pd.DataFrame() 
+    
+    for feat in features_to_roll:
+        # Past features
+        df_features[f'prev_mean_{feat}'] = past_rolling[feat].mean()
+        df_features[f'prev_max_{feat}'] = past_rolling[feat].max()
+        df_features[f'prev_min_{feat}'] = past_rolling[feat].min()
+        df_features[f'prev_std_{feat}'] = past_rolling[feat].std().fillna(0)
+        
+        # Future features
+        df_features[f'next_mean_{feat}'] = future_rolling[feat].mean()
+        df_features[f'next_max_{feat}'] = future_rolling[feat].max()
+        df_features[f'next_min_{feat}'] = future_rolling[feat].min()
+        df_features[f'next_std_{feat}'] = future_rolling[feat].std().fillna(0)
+
+        # now features
+        df_features[f'mean_{feat}'] = rolling[feat].mean()
+        df_features[f'max_{feat}'] = rolling[feat].max()
+        df_features[f'min_{feat}'] = rolling[feat].min()
+        df_features[f'std_{feat}'] = rolling[feat].std().fillna(0)   
+
+    # Clean up
+    df_features = df_features.fillna(0)
+    df_features.to_csv(output_csv, index=False)
+    return df_features
+
+
+def extract_features_v5(
+    input_csv, 
+    output_csv, 
+    window_size=45, 
+    start_frame=0, 
+    interpolation_size=5
+):
+    """
+    Improved feature extractor for predicting:
+    - rally vs downtime in volleyball
+    Uses physics + motion + rolling context.
+    """
+
+    df = pd.read_csv(input_csv)
+
+    # ---------- 1) TIMELINE EXPANSION ----------
+    df = df.sort_values('frame')
+    full_range = pd.DataFrame({
+        'frame': range(start_frame, int(df['frame'].max()) + 1)
+    })
+    df = pd.merge(full_range, df, on='frame', how='left')
+
+    # Interpolate missing positions
+    for col in ['world_x', 'world_y', 'world_z']:
+        df[col] = df[col].interpolate(limit=interpolation_size)
+
+    # ---------- 2) BASIC MOTION FEATURES ----------
+    df['world_vx'] = df['world_x'].diff().fillna(0)
+    df['world_vy'] = df['world_y'].diff().fillna(0)
+    df['world_vz'] = df['world_z'].diff().fillna(0)
+
+    # Speed & acceleration (VERY IMPORTANT)
+    df['speed'] = np.sqrt(
+        df['world_vx']**2 +
+        df['world_vy']**2 +
+        df['world_vz']**2
+    )
+
+    df['accel_x'] = df['world_vx'].diff().fillna(0)
+    df['accel_y'] = df['world_vy'].diff().fillna(0)
+    df['accel_z'] = df['world_vz'].diff().fillna(0)
+
+    df['accel_mag'] = np.sqrt(
+        df['accel_x']**2 +
+        df['accel_y']**2 +
+        df['accel_z']**2
+    )
+
+
+
+    # Proxy for kinetic energy
+    df['kinetic_energy'] = df['speed']**2
+
+    # ---------- 3) ROLLING WINDOWS ----------
+    past_rolling = df.rolling(window=window_size, min_periods=1, closed='left')
+    future_rolling = df.shift(-window_size).rolling(window=window_size, min_periods=1)
+    center_rolling = df.rolling(window=window_size, center=True, min_periods=1)
+
+    # ---------- 4) FEATURES TO ROLL ----------
+    features_to_roll = [
+        'world_x','world_y','world_z',
+        'speed',
+        'accel_mag',
+        'kinetic_energy',
+    ]
+
+    df_features = pd.DataFrame()
+
+    for feat in features_to_roll:
+
+        # --- PAST ---
+        df_features[f'prev_mean_{feat}'] = past_rolling[feat].mean()
+        df_features[f'prev_max_{feat}'] = past_rolling[feat].max()
+        df_features[f'prev_min_{feat}'] = past_rolling[feat].min()
+        # df_features[f'prev_min_max_{feat}'] = past_rolling[feat].max()-past_rolling[feat].min()
+        df_features[f'prev_std_{feat}'] = past_rolling[feat].std().fillna(0)
+
+        # --- FUTURE ---
+        df_features[f'next_mean_{feat}'] = future_rolling[feat].mean()
+        df_features[f'next_max_{feat}'] = future_rolling[feat].max()
+        # df_features[f'next_min_max_{feat}'] = future_rolling[feat].max()-future_rolling[feat].min()
+        df_features[f'next_min_{feat}'] = future_rolling[feat].min()
+        df_features[f'next_std_{feat}'] = future_rolling[feat].std().fillna(0)
+
+        # --- CENTERED (NOW) ---
+        df_features[f'mean_{feat}'] = center_rolling[feat].mean()
+        df_features[f'max_{feat}'] = center_rolling[feat].max()
+        df_features[f'min_{feat}'] = center_rolling[feat].min()
+        # df_features[f'min_max_{feat}'] = center_rolling[feat].max()-center_rolling[feat].min()
+        df_features[f'std_{feat}'] = center_rolling[feat].std().fillna(0)
+
+    df_features['z_range_window'] = center_rolling['world_z'].max() - center_rolling['world_z'].min()
+    df_features = df_features.fillna(0)
+    df_features.to_csv(output_csv, index=False)
+    return df_features
+
+def extract_features_v6(
+    input_csv, 
+    output_csv, 
+    win_short=45,   
+    win_long=90,    
+    start_frame=0, 
+    interpolation_size=10
+):
+    """
+    Improved feature extractor for predicting:
+    - rally vs downtime in volleyball
+    Uses dual-window (short/long) physics + motion rolling context.
+    """
+
+    df = pd.read_csv(input_csv)
+
+    # ---------- 1) TIMELINE EXPANSION ----------
+    df = df.sort_values('frame')
+    full_range = pd.DataFrame({
+        'frame': range(start_frame, int(df['frame'].max()) + 1)
+    })
+    df = pd.merge(full_range, df, on='frame', how='left')
+
+    # Interpolate missing positions
+    for col in ['world_x', 'world_y', 'world_z']:
+        df[col] = df[col].interpolate(limit=interpolation_size)
+
+    # ---------- 2) BASIC MOTION FEATURES ----------
+    df['world_vx'] = df['world_x'].diff().fillna(0)
+    df['world_vy'] = df['world_y'].diff().fillna(0)
+    df['world_vz'] = df['world_z'].diff().fillna(0)
+
+    # Speed & acceleration
+    df['speed'] = np.sqrt(df['world_vx']**2 + df['world_vy']**2 + df['world_vz']**2)
+
+    df['accel_x'] = df['world_vx'].diff().fillna(0)
+    df['accel_y'] = df['world_vy'].diff().fillna(0)
+    df['accel_z'] = df['world_vz'].diff().fillna(0)
+
+    df['accel_mag'] = np.sqrt(df['accel_x']**2 + df['accel_y']**2 + df['accel_z']**2)
+    df['kinetic_energy'] = df['speed']**2
+
+    # ---------- 3) MULTI-WINDOW ROLLING ----------
+    # Define rolling objects for both window sizes
+    windows = {
+        's': win_short,
+        'l': win_long
+    }
+    
+    df_features = pd.DataFrame()
+
+    features_to_roll = [
+        'world_x', 'world_y', 'world_z',
+        'speed',
+        'accel_mag',
+        'kinetic_energy',
+    ]
+
+    for label, size in windows.items():
+        # Define rolling groups for this specific window size
+        past_rolling = df.rolling(window=size, min_periods=1, closed='left')
+        future_rolling = df.shift(-size).rolling(window=size, min_periods=1)
+        center_rolling = df.rolling(window=size, center=True, min_periods=1)
+
+        for feat in features_to_roll:
+            # --- PAST (History) ---
+            df_features[f'{label}_prev_mean_{feat}'] = past_rolling[feat].mean()
+            df_features[f'{label}_prev_max_{feat}'] = past_rolling[feat].max()
+            df_features[f'{label}_prev_std_{feat}'] = past_rolling[feat].std().fillna(0)
+
+            # --- FUTURE (Lookahead) ---
+            df_features[f'{label}_next_mean_{feat}'] = future_rolling[feat].mean()
+            df_features[f'{label}_next_max_{feat}'] = future_rolling[feat].max()
+            df_features[f'{label}_next_std_{feat}'] = future_rolling[feat].std().fillna(0)
+
+            # --- CENTERED (Current Context) ---
+            df_features[f'{label}_mean_{feat}'] = center_rolling[feat].mean()
+            df_features[f'{label}_max_{feat}'] = center_rolling[feat].max()
+            df_features[f'{label}_std_{feat}'] = center_rolling[feat].std().fillna(0)
+
+        # Specialized Feature: Z-Range (Important for identifying ball flight height)
+        df_features[f'{label}_x_range'] = center_rolling['world_x'].max() - center_rolling['world_x'].min()
+        df_features[f'{label}_y_range'] = center_rolling['world_y'].max() - center_rolling['world_y'].min()
+        df_features[f'{label}_z_range'] = center_rolling['world_z'].max() - center_rolling['world_z'].min()
+
+    # ---------- 4) CLEANUP & SAVE ----------
+    df_features = df_features.fillna(0)
+    df_features.to_csv(output_csv, index=False)
+    
+    return df_features

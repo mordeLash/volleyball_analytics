@@ -45,8 +45,8 @@ def run_volleyball_pipeline(config, log_callback, progress_callback=None):
     # If we skip a stage, we use the custom input CSV for that stage's requirement
     fn_detections = config['input_csv_path'] if config['start_at'] == "tracking" else os.path.join(temp_dir, f"{base_name}_detections.csv")
     fn_tracks = config['input_csv_path'] if config['start_at'] == "cleaning" else os.path.join(temp_dir, f"{base_name}_tracks.csv")
-    fn_clean = config['input_csv_path'] if config['start_at'] == "calibration" else os.path.join(temp_dir, f"{base_name}_calibrated.csv")
-    fn_calibrate = config['input_csv_path'] if config['start_at'] == "features" else os.path.join(temp_dir, f"{base_name}_cleaned.csv")
+    fn_clean = config['input_csv_path'] if config['start_at'] == "calibration" else os.path.join(temp_dir, f"{base_name}_cleaned.csv")
+    fn_calibrate = config['input_csv_path'] if config['start_at'] == "features" else os.path.join(temp_dir, f"{base_name}_calibrated.csv")
     
     fn_features = os.path.join(temp_dir, f"{base_name}_features.csv")
     fn_predictions = os.path.join(temp_dir, f"{base_name}_predictions.csv")

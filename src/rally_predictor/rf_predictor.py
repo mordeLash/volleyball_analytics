@@ -6,6 +6,8 @@ import joblib
 import matplotlib.pyplot as plt
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+
 from sklearn.metrics import (
     mean_absolute_error, accuracy_score, 
     confusion_matrix, ConfusionMatrixDisplay, classification_report
@@ -70,6 +72,7 @@ def train_random_forest(rf_path, df_paths, labels_paths, num_est=200, num_min_sa
 
     # 3. TRAINING
     rf = RandomForestClassifier(n_estimators=num_est, min_samples_leaf=num_min_samples, n_jobs=-1)
+    
     rf.fit(trn_xs, trn_y)
     
     # 4. EVALUATION

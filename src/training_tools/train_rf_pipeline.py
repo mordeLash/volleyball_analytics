@@ -30,8 +30,8 @@ def main():
     # a diverse set of examples (different serving styles, camera angles, etc.)
 # Define your game names
     data_names = ["game1_set1", 
-                  "game5_set1", 
-                  "game9_c"
+                 "game5_set1", 
+                 "game9_c"
     ]
 
     # Define the standard file suffixes you need for every game
@@ -51,20 +51,40 @@ def main():
         for name in data_names
     ]
     feature_csvs = []
-    for data_csv in tqdm(data_csvs):
-        track_with_physics_predictive(data_csv[0],data_csv[1])
-        clean_noise(data_csv[1],data_csv[2])
-        calibrate_to_relative_space(data_csv[2],data_csv[3])
-        extract_features(data_csv[3],data_csv[4],window_size=45,interpolation_size=10)
-        feature_csvs.append(data_csv[4])
+    # for data_csv in tqdm(data_csvs):
+    #     track_with_physics_predictive(data_csv[0],data_csv[1])
+    #     clean_noise(data_csv[1],data_csv[2])
+    #     calibrate_to_relative_space(data_csv[2],data_csv[3])
+    #     extract_features(data_csv[3],data_csv[4],window_size=45,interpolation_size=10)
+    #     feature_csvs.append(data_csv[4])
     
 
     # These must match the order of the feature_csvs list
     label_csvs = [
-        "./output/training_data/game1_rally_labels_per_frame.csv",
-        "./output/training_data/game5_rally_labels_per_frame.csv",
-        "./output/training_data/game9_rally_labels_per_frame.csv",
+       "./output/training_data/game1_rally_labels_per_frame.csv",
+       "./output/training_data/game5_rally_labels_per_frame.csv",
+    #    "./output/training_data/game7_rally_labels_per_frame.csv",
+       "./output/training_data/game9_rally_labels_per_frame.csv",
     ]
+    d3_csv = r"C:\Users\morde\Desktop\projects\volleyball_cv_project\src\_notebooks\ball_coords_3d.csv"
+    d3_features = "ball3d_f.csv"
+    extract_features(d3_csv,d3_features)
+    feature_csvs.append(d3_features)
+
+    d3_csv2 = r"C:\Users\morde\Desktop\projects\volleyball_cv_project\src\_notebooks\ball_coords2_3d.csv"
+    d3_features2 = "ball3d2_f.csv"
+    extract_features(d3_csv2,d3_features2)
+    feature_csvs.append(d3_features2)
+
+
+    # d3_csv3 = r"C:\Users\morde\Desktop\projects\volleyball_cv_project\src\_notebooks\ball_coords3_3d.csv"
+    # d3_features3 = "ball3d3_f.csv"
+    # extract_features(d3_csv3,d3_features3,window_size=45)
+    # feature_csvs.append(d3_features3)
+    d3_csv4 = r"C:\Users\morde\Desktop\projects\volleyball_cv_project\src\_notebooks\ball_coords4_3d.csv"
+    d3_features4 = "ball3d4_f.csv"
+    extract_features(d3_csv4,d3_features4)
+    feature_csvs.append(d3_features4)
 
     # 3. MODEL TRAINING
     # Launch the multi-game training pipeline
@@ -73,7 +93,7 @@ def main():
         feature_csvs,
         label_csvs,
         num_est=300,            # Increased from default for better stability
-        num_min_samples=50      # Increased for stronger regularization
+        num_min_samples=70      # Increased for stronger regularization
     )
 
 if __name__ == "__main__":
