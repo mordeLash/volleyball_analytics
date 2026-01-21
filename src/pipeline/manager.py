@@ -10,8 +10,11 @@ from src.ball_detector.track_ball_detections import track_with_physics_predictiv
 from src.ball_detector.clean_tracking_data import clean_noise_v2 as clean_noise
 from src.rally_predictor import predict_rallies,analyze_rally_stats,smooth_predictions
 from src.visualizer import visualize
-from src.rally_predictor.extract_features import extract_features_v3 as extract_features
+from src.rally_predictor.extract_features import extract_features_v7 as extract_features
 from src.ball_detector.calibrate_detections import calibrate_to_relative_space
+# Calibration Imports
+from src.calibration.geometry import compute_camera_matrix
+import pickle
 
 def run_volleyball_pipeline(config, log_callback, progress_callback=None):
     """
@@ -99,7 +102,22 @@ def run_volleyball_pipeline(config, log_callback, progress_callback=None):
     # Stage: Calibration
     if should_run("calibration"):
         log_callback("--- Running Stage: Calibration ---")
-        calibrate_to_relative_space(fn_clean, output_csv=fn_calibrate)
+        
+        # 1. Check for existing calibration file (Passed from GUI or inferred)
+        calib_file = config.get('calibration_file')
+        if not calib_file:
+             calib_file = os.path.join(out_dir, f"{base_name}_calibration.pkl")
+
+        calibration_data = None
+        if os.path.exists(calib_file):
+             log_callback(f"Loading calibration from {calib_file}")
+             with open(calib_file, 'rb') as f:
+                 calibration_data = pickle.load(f)
+        else:
+             log_callback("No calibration file found. Proceeding without 3D info.")
+        
+        # Pass the calibration FILE/Data to the processing function
+        calibrate_to_relative_space(fn_clean, fn_calibrate, calibration_data=calibration_data)
 
     # Stage: Features
     if should_run("features"):
@@ -107,8 +125,6 @@ def run_volleyball_pipeline(config, log_callback, progress_callback=None):
         extract_features(
             input_csv=fn_calibrate, 
             output_csv=fn_features, 
-            window_size=feature_params.get("window_size", 60),
-            interpolation_size=feature_params.get("interpolation_size", 5)
         )
 
     # Stage: Prediction
@@ -146,7 +162,7 @@ def run_volleyball_pipeline(config, log_callback, progress_callback=None):
 
     # 4. FINALIZE
     if config['keep_all']:
-        for f in [fn_detections, fn_tracks, fn_clean, fn_features, fn_predictions]:
+        for f in [fn_detections, fn_tracks, fn_clean,fn_calibrate, fn_features, fn_predictions]:
             if os.path.exists(f) and f.startswith(temp_dir):
                 shutil.move(f, os.path.join(table_data_dir, os.path.basename(f)))
     

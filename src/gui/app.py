@@ -6,7 +6,10 @@ import customtkinter as ctk
 from tkinter import messagebox
 from src.pipeline.manager import run_volleyball_pipeline
 from src.gui.components import FilePicker, AdvancedOptionsFrame
+from src.gui.calibration_dialog import CalibrationDialog
+from src.calibration.geometry import compute_camera_matrix
 from src.utils import get_resource_path
+import pickle
 
 class VolleyballAnalyticsGUI(ctk.CTk):
     def __init__(self):
@@ -123,6 +126,44 @@ class VolleyballAnalyticsGUI(ctk.CTk):
             'start_time': self.start_time.get(),
             'end_time': self.end_time.get()
         }
+
+        # --- CALIBRATION CHECK (MAIN THREAD) ---
+        # Only check if we are starting from detection/tracking (early stages)
+        if config['start_at'] in ["detection", "tracking", "cleaning"] and not config['input_csv_path']:
+             # Use video basename
+             # Use video basename
+             base_name = os.path.basename(config['video_path']).rsplit('.', 1)[0]
+             
+             # Create calibrations folder
+             calib_dir = os.path.join(config['output_dir'], "calibrations")
+             os.makedirs(calib_dir, exist_ok=True)
+             
+             calib_file = os.path.join(calib_dir, f"{base_name}_calibration.pkl")
+             
+             # Logic: If file doesn't exist, OR if user requested redo (could add checkbox, for now just existence)
+             # NOTE: Default behavior - if missing, ASK.
+             if not os.path.exists(calib_file):
+                 do_calib = messagebox.askyesno("Calibration", "No calibration found. Do you want to calibrate the court now?")
+                 if do_calib:
+                    dialog = CalibrationDialog(self, config['video_path'])
+                    self.wait_window(dialog) # Block until closed
+                    
+                    if dialog.output_points:
+                        # Compute and Save
+                        try:
+                            self.log("Computing Camera Matrix...")
+                            calibration_data = compute_camera_matrix(dialog.output_points)
+                            # Ensure dir exists (already done but safe)
+                            os.makedirs(calib_dir, exist_ok=True)
+                            
+                            with open(calib_file, 'wb') as f:
+                                pickle.dump(calibration_data, f)
+                            self.log(f"Calibration saved to {calib_file}")
+                        except Exception as e:
+                            self.log(f"Calibration Failed: {e}")
+                            messagebox.showwarning("Warning", f"Calibration math failed: {e}\nProceeding without 3D.")
+             
+             config['calibration_file'] = calib_file
 
         self.run_button.configure(state="disabled", text="Processing...")
         thread = threading.Thread(target=self.execute_run, args=(config,))

@@ -1,10 +1,17 @@
 from tqdm import tqdm
+import os
+import pickle
+import customtkinter as ctk
+import tkinter as tk
+from tkinter import filedialog
 
 from src.rally_predictor.rf_predictor import train_random_forest
 from src.ball_detector.track_ball_detections import track_with_physics_predictive_v2 as track_with_physics_predictive
 from src.ball_detector.clean_tracking_data import clean_noise_v2 as clean_noise
 from src.ball_detector.calibrate_detections import calibrate_to_relative_space
-from src.rally_predictor.extract_features import extract_features_v3 as extract_features
+from src.rally_predictor.extract_features import extract_features_v7 as extract_features
+from src.gui.calibration_dialog import CalibrationDialog
+from src.calibration.geometry import compute_camera_matrix
 
 def main():
     """
@@ -23,14 +30,15 @@ def main():
     """
     # 1. PATH CONFIGURATION
     # The output filename for our trained Random Forest model (version 5)
-    rf_model_path = "./models/rally_prediction/rally_predictor_rf_v5.pkl"
+    rf_model_path = "./models/rally_prediction/rally_predictor_rf_v6.pkl"
     
     # 2. DATASET DEFINITION
     # We include data from three different games to provide the model with 
     # a diverse set of examples (different serving styles, camera angles, etc.)
 # Define your game names
     data_names = ["game1_set1", 
-                 "game5_set1", 
+                 "game5_set1",
+                 "game7_set1", 
                  "game9_c"
     ]
 
@@ -51,40 +59,64 @@ def main():
         for name in data_names
     ]
     feature_csvs = []
-    # for data_csv in tqdm(data_csvs):
-    #     track_with_physics_predictive(data_csv[0],data_csv[1])
-    #     clean_noise(data_csv[1],data_csv[2])
-    #     calibrate_to_relative_space(data_csv[2],data_csv[3])
-    #     extract_features(data_csv[3],data_csv[4],window_size=45,interpolation_size=10)
-    #     feature_csvs.append(data_csv[4])
+    for name, data_csv in tqdm(zip(data_names, data_csvs), total=len(data_names)):
+        track_with_physics_predictive(data_csv[0],data_csv[1])
+        clean_noise(data_csv[1],data_csv[2])
+        
+        # Load Calibration
+        calib_file = f"{base_path}/calibrations/{name}_calibration.pkl"
+        calib_data = None
+        if os.path.exists(calib_file):
+            with open(calib_file, 'rb') as f:
+                calib_data = pickle.load(f)
+        else:
+             print(f"Warning: Calibration missing for {name}")
+             # Interactive Fallback
+             root = ctk.CTk()
+             root.withdraw()
+             
+             print(f"Please select the video file for {name}...")
+             video_path = filedialog.askopenfilename(
+                 title=f"Select Video for {name}",
+                 filetypes=[("Video Files", "*.mp4 *.avi *.mov *.mkv")]
+             )
+             
+             if video_path:
+                 # Launch Calibration Dialog
+                 dialog = CalibrationDialog(root, video_path)
+                 # We need to show root slightly or just wait? 
+                 # Dialog is Toplevel, so it needs root to exist.
+                 # wait_window blocks until dialog is destroyed.
+                 root.wait_window(dialog)
+                 
+                 if dialog.output_points:
+                     try:
+                         print("Computing Camera Matrix...")
+                         calib_data = compute_camera_matrix(dialog.output_points)
+                         
+                         # Ensure dir exists
+                         os.makedirs(os.path.dirname(calib_file), exist_ok=True)
+                         
+                         with open(calib_file, 'wb') as f:
+                             pickle.dump(calib_data, f)
+                         print(f"Calibration saved to {calib_file}")
+                     except Exception as e:
+                         print(f"Calibration Failed: {e}")
+             
+             root.destroy()
+
+        calibrate_to_relative_space(data_csv[2],data_csv[3], calibration_data=calib_data)
+        extract_features(data_csv[3],data_csv[4],interpolation_size=10)
+        feature_csvs.append(data_csv[4])
     
 
     # These must match the order of the feature_csvs list
     label_csvs = [
        "./output/training_data/game1_rally_labels_per_frame.csv",
        "./output/training_data/game5_rally_labels_per_frame.csv",
-    #    "./output/training_data/game7_rally_labels_per_frame.csv",
+       "./output/training_data/game7_set1_rally_labels_per_frame.csv",
        "./output/training_data/game9_rally_labels_per_frame.csv",
     ]
-    d3_csv = r"C:\Users\morde\Desktop\projects\volleyball_cv_project\src\_notebooks\ball_coords_3d.csv"
-    d3_features = "ball3d_f.csv"
-    extract_features(d3_csv,d3_features)
-    feature_csvs.append(d3_features)
-
-    d3_csv2 = r"C:\Users\morde\Desktop\projects\volleyball_cv_project\src\_notebooks\ball_coords2_3d.csv"
-    d3_features2 = "ball3d2_f.csv"
-    extract_features(d3_csv2,d3_features2)
-    feature_csvs.append(d3_features2)
-
-
-    # d3_csv3 = r"C:\Users\morde\Desktop\projects\volleyball_cv_project\src\_notebooks\ball_coords3_3d.csv"
-    # d3_features3 = "ball3d3_f.csv"
-    # extract_features(d3_csv3,d3_features3,window_size=45)
-    # feature_csvs.append(d3_features3)
-    d3_csv4 = r"C:\Users\morde\Desktop\projects\volleyball_cv_project\src\_notebooks\ball_coords4_3d.csv"
-    d3_features4 = "ball3d4_f.csv"
-    extract_features(d3_csv4,d3_features4)
-    feature_csvs.append(d3_features4)
 
     # 3. MODEL TRAINING
     # Launch the multi-game training pipeline

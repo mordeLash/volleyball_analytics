@@ -522,3 +522,125 @@ def extract_features_v6(
     df_features.to_csv(output_csv, index=False)
     
     return df_features
+
+def extract_features_v7(
+    input_csv, 
+    output_csv, 
+    win_short=45,   
+    win_long=90,    
+    start_frame=0, 
+    interpolation_size=10
+):
+    """
+    Advanced Feature Extractor V7:
+    - Adds "Context-Aware" features (Net proximity, Court Bounds).
+    - Adds "Physics-Consistency" features (Gravity deviation, Jerk, Vertical Dominance).
+    """
+
+    df = pd.read_csv(input_csv)
+
+    # ---------- 1) TIMELINE EXPANSION ----------
+    df = df.sort_values('frame')
+    full_range = pd.DataFrame({
+        'frame': range(start_frame, int(df['frame'].max()) + 1)
+    })
+    df = pd.merge(full_range, df, on='frame', how='left')
+
+    # Interpolate missing positions
+    for col in ['world_x', 'world_y', 'world_z']:
+        df[col] = df[col].interpolate(limit=interpolation_size)
+
+    # ---------- 2) BASIC KINEMATICS ----------
+    for axis in ['x', 'y', 'z']:
+        # Velocity
+        df[f'world_v{axis}'] = df[f'world_{axis}'].diff().fillna(0)
+        # Acceleration
+        df[f'accel_{axis}'] = df[f'world_v{axis}'].diff().fillna(0)
+        # Jerk (Change in acceleration - smoothness)
+        df[f'jerk_{axis}'] = df[f'accel_{axis}'].diff().fillna(0)
+
+    # Magnitudes
+    df['speed'] = np.sqrt(df['world_vx']**2 + df['world_vy']**2 + df['world_vz']**2)
+    df['accel_mag'] = np.sqrt(df['accel_x']**2 + df['accel_y']**2 + df['accel_z']**2)
+    df['jerk_mag'] = np.sqrt(df['jerk_x']**2 + df['jerk_y']**2 + df['jerk_z']**2)
+    
+    df['kinetic_energy'] = df['speed']**2
+
+    # ---------- 3) CONTEXT & ADVANCED PHYSICS ----------
+    
+    # A. Court Context (Using new Origin: BL=(0,0), Center=(4.5, 9), Net Y=9, Net Z=2.43)
+    df['dist_to_center'] = np.sqrt((df['world_x'] - 4.5)**2 + (df['world_y'] - 9.0)**2)
+    df['dist_to_net_y'] = (df['world_y'] - 9.0).abs() # Distance to net plane
+    df['height_above_net'] = df['world_z'] - 2.43
+    
+    # Boolean: Is inside logical court bounds? (Allowing slight buffer)
+    # Court is 9x18. Origin at 0,0.
+    df['is_in_court'] = ((df['world_x'] >= -1) & (df['world_x'] <= 10) & 
+                         (df['world_y'] >= -1) & (df['world_y'] <= 19)).astype(float)
+
+    # B. Trajectory Shape
+    # Vertical Dominance: Ratio of Z-speed to total speed. 
+    # High for sets/digs. Low for walking/rolling.
+    df['vert_dominance'] = df['world_vz'].abs() / (df['speed'] + 1e-6)
+
+    # Gravity Deviation (Heuristic)
+    # In ideal freefall, accel_z is constant -g. 
+    # Sudden changes in accel_z imply contact (hit/bounce). 
+    # Low magnitude accel_z close to 0 implies holding/carrying.
+    # We'll just track raw accel_z stability in rolling windows mostly.
+    
+    # ---------- 4) MULTI-WINDOW ROLLING ----------
+    windows = {
+        's': win_short,
+        'l': win_long
+    }
+    
+    # Collection dictionary to avoid DataFrame fragmentation
+    features_dict = {}
+
+    features_to_roll = [
+        # Base
+        'world_x', 'world_y', 'world_z',
+        'speed', 'accel_mag', 'jerk_mag', 'kinetic_energy',
+        
+        # New Context
+        'dist_to_center', 'dist_to_net_y', 'height_above_net',
+        'vert_dominance', 
+        
+        # Components (useful for detailed variance)
+        'world_vz', 'accel_z' 
+    ]
+
+    for label, size in windows.items():
+        past_rolling = df.rolling(window=size, min_periods=1, closed='left')
+        future_rolling = df.shift(-size).rolling(window=size, min_periods=1)
+        center_rolling = df.rolling(window=size, center=True, min_periods=1)
+
+        for feat in features_to_roll:
+            # Stats including std (critical for distinguishing smooth flight vs chaotic noise)
+            
+            # MEAN
+            features_dict[f'{label}_prev_mean_{feat}'] = past_rolling[feat].mean()
+            features_dict[f'{label}_next_mean_{feat}'] = future_rolling[feat].mean()
+            features_dict[f'{label}_mean_{feat}'] = center_rolling[feat].mean()
+            
+            # MAX
+            features_dict[f'{label}_max_{feat}'] = center_rolling[feat].max()
+            
+            # STD (Stability)
+            features_dict[f'{label}_prev_std_{feat}'] = past_rolling[feat].std().fillna(0)
+            features_dict[f'{label}_next_std_{feat}'] = future_rolling[feat].std().fillna(0)
+            features_dict[f'{label}_std_{feat}'] = center_rolling[feat].std().fillna(0)
+
+        # Z-Range (Spread)
+        features_dict[f'{label}_z_range'] = center_rolling['world_z'].max() - center_rolling['world_z'].min()
+        
+        # In-Court Ratio (How much of the window was in court?)
+        features_dict[f'{label}_in_court_ratio'] = center_rolling['is_in_court'].mean()
+
+    # ---------- 5) CLEANUP & SAVE ----------
+    df_features = pd.DataFrame(features_dict)
+    df_features = df_features.fillna(0)
+    df_features.to_csv(output_csv, index=False)
+    
+    return df_features

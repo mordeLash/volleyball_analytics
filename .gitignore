@@ -25,6 +25,7 @@ yolo11n.pt
 # --- Environment Secrets ---
 output/table_data
 output/temp
+output/training_data/calibrations   
 .env
 *.spec
 
