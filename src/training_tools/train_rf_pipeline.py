@@ -30,16 +30,18 @@ def main():
     """
     # 1. PATH CONFIGURATION
     # The output filename for our trained Random Forest model (version 5)
-    rf_model_path = "./models/rally_prediction/rally_predictor_rf_v6.pkl"
+    rf_model_path = "./models/rally_prediction/rally_predictor_rf_v7.pkl"
     
     # 2. DATASET DEFINITION
     # We include data from three different games to provide the model with 
     # a diverse set of examples (different serving styles, camera angles, etc.)
 # Define your game names
-    data_names = ["game1_set1", 
-                 "game5_set1",
-                 "game7_set1", 
-                 "game9_c"
+    data_names = [
+                "game1_set1", 
+                # "game2_set1",
+                "game5_set1",
+                # "game7_set1", 
+                "game9_c"
     ]
 
     # Define the standard file suffixes you need for every game
@@ -113,8 +115,9 @@ def main():
     # These must match the order of the feature_csvs list
     label_csvs = [
        "./output/training_data/game1_rally_labels_per_frame.csv",
+    #    "./output/training_data/game2_set1_rally_labels_per_frame.csv",
        "./output/training_data/game5_rally_labels_per_frame.csv",
-       "./output/training_data/game7_set1_rally_labels_per_frame.csv",
+    #    "./output/training_data/game7_set1_rally_labels_per_frame.csv",
        "./output/training_data/game9_rally_labels_per_frame.csv",
     ]
 
@@ -124,7 +127,7 @@ def main():
         rf_model_path,
         feature_csvs,
         label_csvs,
-        num_est=300,            # Increased from default for better stability
+        num_est=500,            # Increased from default for better stability
         num_min_samples=70      # Increased for stronger regularization
     )
 

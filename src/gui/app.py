@@ -22,7 +22,7 @@ class VolleyballAnalyticsGUI(ctk.CTk):
         self.video_path = ctk.StringVar(self)
         self.output_dir = ctk.StringVar(self, value=os.path.join(os.path.expanduser("~"), "Videos", "volleyball"))
         self.device = ctk.StringVar(self, value="intel:gpu")
-        self.rf_model_ver = ctk.StringVar(self, value="v3")
+        self.rf_model_ver = ctk.StringVar(self, value="rally_predictor_rf_v6.pkl")
         self.start_at = ctk.StringVar(self, value="detection")
         self.stop_at = ctk.StringVar(self, value="visualization")
         self.viz_type = ctk.StringVar(self, value="cut")
@@ -31,6 +31,7 @@ class VolleyballAnalyticsGUI(ctk.CTk):
         self.end_time = ctk.StringVar(self, value="00:00:00")
         self.input_csv_path = ctk.StringVar(self, value="")
         self.viz_early = ctk.BooleanVar(self, value=False)
+        self.ball_model = ctk.StringVar(self, value="vbn11_openvino_model_1")
         
         self.show_advanced = False
         
@@ -77,7 +78,8 @@ class VolleyballAnalyticsGUI(ctk.CTk):
             'keep_all': self.keep_all,
             'viz_type': self.viz_type,
             'start_time': self.start_time,
-            'end_time': self.end_time
+            'end_time': self.end_time,
+            'ball_model': self.ball_model
         }
         self.adv_frame = AdvancedOptionsFrame(self, adv_vars)
 
@@ -90,7 +92,6 @@ class VolleyballAnalyticsGUI(ctk.CTk):
         self.run_button = ctk.CTkButton(self, text="Start Pipeline", command=self.start_pipeline_thread, 
                                         fg_color="#1f538d", hover_color="#14375e", height=40, font=("Roboto", 16, "bold"))
         self.run_button.pack(pady=20)
-
         
     def toggle_advanced(self):
         if self.show_advanced:
@@ -124,7 +125,8 @@ class VolleyballAnalyticsGUI(ctk.CTk):
             'viz_type': self.viz_type.get(),
             'keep_all': self.keep_all.get(),
             'start_time': self.start_time.get(),
-            'end_time': self.end_time.get()
+            'end_time': self.end_time.get(),
+            'ball_model': self.ball_model.get()
         }
 
         # --- CALIBRATION CHECK (MAIN THREAD) ---

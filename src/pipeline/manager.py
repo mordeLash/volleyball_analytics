@@ -7,7 +7,7 @@ import pandas as pd
 from src.utils import get_resource_path, ensure_30fps, trim_video 
 from src.ball_detector import get_ball_detections
 from src.ball_detector.track_ball_detections import track_with_physics_predictive_v2 as track_with_physics_predictive
-from src.ball_detector.clean_tracking_data import clean_noise_v2 as clean_noise
+from src.ball_detector.clean_tracking_data import clean_noise_v3 as clean_noise
 from src.rally_predictor import predict_rallies,analyze_rally_stats,smooth_predictions
 from src.visualizer import visualize
 from src.rally_predictor.extract_features import extract_features_v7 as extract_features
@@ -21,7 +21,7 @@ def run_volleyball_pipeline(config, log_callback, progress_callback=None):
     Executes the volleyball analytics pipeline with support for 
     modular entry/exit points and visualization control.
     """
-    STAGES = ["detection", "tracking", "cleaning", "features","calibration", "prediction", "visualization"]
+    STAGES = ["detection", "tracking", "cleaning", "calibration","features", "prediction", "visualization"]
     
     # Map start/stop names to indices for logical comparison
     start_idx = STAGES.index(config.get('start_at', 'detection'))
@@ -56,13 +56,9 @@ def run_volleyball_pipeline(config, log_callback, progress_callback=None):
     final_video_output = os.path.join(video_out_dir, f"{base_name}_{config['stop_at']}.mp4")
 
     # 3. LOAD MODEL CONFIGS
-    rf_model_config_path = get_resource_path(os.path.join("models", "rally_prediction", "config.yaml"))
-    with open(rf_model_config_path, 'r') as f:
-        rf_configs = yaml.safe_load(f)["models"]
-    
-    rf_info = rf_configs.get(config['rf_model_ver'], {})
-    rf_path = get_resource_path(rf_info.get("path", f"models/rally_prediction/rally_predictor_rf_{config['rf_model_ver']}.pkl"))
-    feature_params = rf_info.get("feature_extraction", {})
+    # 3. LOAD MODEL CONFIGS
+    # We now expect rf_model_ver to be the actual filename
+    rf_path = get_resource_path(os.path.join("models", "rally_prediction", config.get('rf_model_ver', 'rally_predictor_rf_v6.pkl')))
 
     # Helper function to check if a stage should be executed
     def should_run(stage):
@@ -81,7 +77,7 @@ def run_volleyball_pipeline(config, log_callback, progress_callback=None):
         working_video = ensure_30fps(working_video, proc_fps_path, log_callback)
 
         get_ball_detections(
-            model_path=get_resource_path("models/ball_detection/vbn11_openvino_model_1"), 
+            model_path=get_resource_path(os.path.join("models", "ball_detection", config.get('ball_model', 'vbn11_openvino_model_1'))), 
             video_path=working_video, 
             output_csv=fn_detections, 
             device=config['device'],
@@ -106,7 +102,8 @@ def run_volleyball_pipeline(config, log_callback, progress_callback=None):
         # 1. Check for existing calibration file (Passed from GUI or inferred)
         calib_file = config.get('calibration_file')
         if not calib_file:
-             calib_file = os.path.join(out_dir, f"{base_name}_calibration.pkl")
+             calib_base_name = base_name.split('_')[0]
+             calib_file = os.path.join(out_dir,"calibrations", f"{calib_base_name}_calibration.pkl")
 
         calibration_data = None
         if os.path.exists(calib_file):
@@ -147,7 +144,7 @@ def run_volleyball_pipeline(config, log_callback, progress_callback=None):
         log_callback(f"--- Running Stage: Visualization (Mode: {config['viz_type']}) ---")
         
         # Decide which data to overlay based on what is available
-        track_file = fn_clean if os.path.exists(fn_clean) else (fn_tracks if os.path.exists(fn_tracks) else fn_detections)
+        track_file = fn_calibrate if os.path.exists(fn_calibrate) else (fn_clean if os.path.exists(fn_clean) else (fn_tracks if os.path.exists(fn_tracks) else fn_detections))
         pred_file = fn_predictions if os.path.exists(fn_predictions) else None
 
         visualize(

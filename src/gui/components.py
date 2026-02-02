@@ -2,6 +2,8 @@
 
 import customtkinter as ctk
 from tkinter import filedialog
+import os
+from src.utils import get_resource_path
 
 class FilePicker(ctk.CTkFrame):
     """A reusable row for picking a file or directory."""
@@ -57,31 +59,49 @@ class AdvancedOptionsFrame(ctk.CTkFrame):
         # --- Section 3: Model & Hardware ---
         self.create_header("Hardware & Model", 3)
 
+        # --- RF Model Selection ---
+        try:
+            rf_dir = get_resource_path("models/rally_prediction")
+            rf_models = [f for f in os.listdir(rf_dir) if f.endswith(".pkl")]
+        except Exception:
+            rf_models = ["rally_predictor_rf_v6.pkl"] # Fallback
+
         ctk.CTkLabel(self, text="RF Model:").grid(row=4, column=0, padx=(20, 10), pady=5, sticky="w")
-        ctk.CTkComboBox(self, values=["v3", "v4","v5"], variable=variables['rf_model_ver']).grid(row=4, column=1, padx=10, pady=5, sticky="ew")
+        ctk.CTkComboBox(self, values=rf_models, variable=variables['rf_model_ver']).grid(row=4, column=1, padx=10, pady=5, sticky="ew")
         
         ctk.CTkLabel(self, text="Device:").grid(row=4, column=2, padx=(20, 10), pady=5, sticky="w")
         ctk.CTkComboBox(self, values=["cpu", "intel:gpu"], variable=variables['device']).grid(row=4, column=3, padx=10, pady=5, sticky="ew")
 
-        # --- Section 4: Trimming ---
-        self.create_header("Video Trimming", 5)
+        # --- Ball Model Selection ---
+        try:
+            model_dir = get_resource_path("models/ball_detection")
+            ball_models = [f for f in os.listdir(model_dir)]
+        except Exception:
+            ball_models = ["vbn11_openvino_model_1"] # Fallback
 
-        ctk.CTkLabel(self, text="Start:").grid(row=6, column=0, padx=(20, 10), pady=5, sticky="w")
-        ctk.CTkEntry(self, textvariable=variables['start_time'], placeholder_text="00:00:00").grid(row=6, column=1, padx=10, pady=5, sticky="ew")
+        ctk.CTkLabel(self, text="Ball Model:").grid(row=5, column=0, padx=(20, 10), pady=5, sticky="w")
+        ctk.CTkComboBox(self, values=ball_models, variable=variables['ball_model']).grid(row=5, column=1, padx=10, pady=5, sticky="ew")
+
+
+        # --- Section 4: Trimming ---
+        self.create_header("Video Trimming", 6)
+
+        ctk.CTkLabel(self, text="Start:").grid(row=7, column=0, padx=(20, 10), pady=5, sticky="w")
+        ctk.CTkEntry(self, textvariable=variables['start_time'], placeholder_text="00:00:00").grid(row=7, column=1, padx=10, pady=5, sticky="ew")
         
-        ctk.CTkLabel(self, text="End:").grid(row=6, column=2, padx=(20, 10), pady=5, sticky="w")
-        ctk.CTkEntry(self, textvariable=variables['end_time'], placeholder_text="Leave empty for end").grid(row=6, column=3, padx=10, pady=5, sticky="ew")
+        ctk.CTkLabel(self, text="End:").grid(row=7, column=2, padx=(20, 10), pady=5, sticky="w")
+        ctk.CTkEntry(self, textvariable=variables['end_time'], placeholder_text="Leave empty for end").grid(row=7, column=3, padx=10, pady=5, sticky="ew")
 
         # --- Section 5: Visualization & Output ---
-        self.create_header("Output Options", 7)
+        self.create_header("Output Options", 8)
 
         viz_types = ["all", "cut", "both", "data", "trajectory"]
-        ctk.CTkLabel(self, text="Viz Style:").grid(row=8, column=0, padx=(20, 10), pady=5, sticky="w")
-        ctk.CTkComboBox(self, values=viz_types, variable=variables['viz_type']).grid(row=8, column=1, padx=10, pady=5, sticky="ew")
+        ctk.CTkLabel(self, text="Viz Style:").grid(row=9, column=0, padx=(20, 10), pady=5, sticky="w")
+        ctk.CTkComboBox(self, values=viz_types, variable=variables['viz_type']).grid(row=9, column=1, padx=10, pady=5, sticky="ew")
 
         # Group Checkboxes in a Frame for better alignment
         check_frame = ctk.CTkFrame(self, fg_color="transparent")
-        check_frame.grid(row=9, column=0, columnspan=4, pady=(10, 0), sticky="ew")
+        check_frame.grid(row=10, column=0, columnspan=4, pady=(10, 0), sticky="ew")
         
         ctk.CTkCheckBox(check_frame, text="Keep CSVs", variable=variables['keep_all']).pack(side="left", padx=20)
         ctk.CTkCheckBox(check_frame, text="Visualize on Early Stop", variable=variables['viz_early']).pack(side="left", padx=20)

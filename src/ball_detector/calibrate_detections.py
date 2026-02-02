@@ -34,7 +34,7 @@ def calibrate_to_relative_space(input_csv, output_csv, calibration_data=None):
         df['world_z'] = np.nan
 
     # 3. Final Output (Strictly cx and cy as requested)
-    base_cols = ['frame', 'track_id', 'cx', 'cy','w','h']
+    base_cols = ['frame', 'track_id', 'cx', 'cy','w','h','x1','y1','x2','y2','conf']
     extra_cols = ['world_x', 'world_y', 'world_z']
     
     # Check for track_id in case it was dropped in a previous step

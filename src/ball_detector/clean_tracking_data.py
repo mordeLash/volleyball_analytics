@@ -127,3 +127,62 @@ def clean_noise_v2(tracking_csv, output_csv):
     
     n_noise = len(stats) - len(valid_ids)
     print(f"Clustering Complete: Found {len(valid_ids)} 'Ball' tracks and {n_noise} 'Noise' tracks.")
+
+
+
+
+
+def clean_noise_v3(tracking_csv, output_csv):
+    df = pd.read_csv(tracking_csv)
+    if len(df) < 10: # Minimum threshold to even consider processing
+        df.to_csv(output_csv, index=False)
+        return
+
+    # 1. Advanced Feature Extraction
+    # Calculate path length per track_id (sum of Euclidean distances)
+    df['dx'] = df.groupby('track_id')['cx'].diff().fillna(0)
+    df['dy'] = df.groupby('track_id')['cy'].diff().fillna(0)
+    df['dist'] = np.sqrt(df['dx']**2 + df['dy']**2)
+
+    stats = df.groupby('track_id').agg(
+        duration=('frame', 'count'),
+        path_length=('dist', 'sum'),
+        avg_conf=('conf', 'mean'),
+        avg_speed=('speed_px_frame', 'mean'),
+        max_speed=('speed_px_frame', 'max')
+    ).reset_index()
+
+    if len(stats) < 2:
+        df.to_csv(output_csv, index=False)
+        return
+
+    # 2. Scaling and Clustering
+    features = ['duration', 'path_length', 'avg_speed', 'avg_conf']
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(stats[features])
+
+    kmeans = KMeans(n_clusters=2, n_init=10, random_state=28)
+    stats['cluster'] = kmeans.fit_predict(X_scaled)
+
+    # 3. Intelligent Cluster Selection
+    # We rank clusters by a "Ball Score" (Higher is better)
+    cluster_metrics = stats.groupby('cluster')[features].mean()
+    # Normalize metrics within the two clusters to decide which is the ball
+    ball_score = (cluster_metrics['path_length'] * 0.5 + 
+                  cluster_metrics['duration'] * 0.4 + 
+                  cluster_metrics['avg_conf'] * 0.1)
+    
+    ball_cluster_id = ball_score.idxmax()
+    
+    # 4. Filter
+    valid_ids = stats[stats['cluster'] == ball_cluster_id]['track_id']
+    df_filtered = df[df['track_id'].isin(valid_ids)].copy()
+
+    # Deduplicate: Keep highest confidence per frame
+    df_filtered = df_filtered.sort_values(['frame', 'conf'], ascending=[True, False])
+    df_filtered = df_filtered.drop_duplicates(subset=['frame'], keep='first')
+
+    df_filtered.drop(columns=['dx', 'dy', 'dist'], inplace=True)
+    df_filtered.to_csv(output_csv, index=False)
+    
+    print(f"Kept {len(valid_ids)} tracks. Removed {len(stats) - len(valid_ids)} noise tracks.")
